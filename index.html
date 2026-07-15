@@ -17,6 +17,7 @@
     --border:         rgba(11,11,11,0.10);
     --s-soma:         #2a78d6;
     --s-soma2:        #1baf7a;
+    --s-prior2:       #c98500;
     --s-city:         #eb6834;
     --delta-bad:      #d03b3b;
     --delta-good:     #006300;
@@ -207,7 +208,7 @@
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
-    <p>The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed blue line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
+    <p>The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
     <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
   </section>
 
@@ -437,7 +438,7 @@
   var CHARTS = [
     { id: "suspcalls", kind: "stack", geo: "SoMa",
       priorKey: "suspCalls", priorName: "Total · same period 2025",
-      priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-soma)",
+      priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
       title: "“Suspicious person” calls & stops",
       sub: "Dispatched records · excludes cancelled/duplicates (CAN/22/DUP)", src: "calls",
       series: [
