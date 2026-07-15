@@ -17,6 +17,7 @@
     --border:         rgba(11,11,11,0.10);
     --s-soma:         #2a78d6;
     --s-soma2:        #1baf7a;
+    --s-soma3:        #c98500;
     --s-prior2:       #c98500;
     --s-city:         #eb6834;
     --delta-bad:      #d03b3b;
@@ -201,6 +202,8 @@
       <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all so every drug violation is counted here exactly once.</dd>
       <dt>&ldquo;Suspicious person&rdquo; calls &amp; stops</dt>
       <dd>Law-enforcement dispatched records whose final call type is &ldquo;Suspicious Person,&rdquo; split by who initiated them: <em>911 calls from the public</em> (records where someone called it in) versus <em>officer-initiated &ldquo;on-view&rdquo; records</em>, where an officer or city street team observed something on patrol and generated the record themselves (includes HSOC street-team referrals). The two measure different things &mdash; community reporting versus police activity. Excludes records cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
+      <dt>Larceny, violent crime &amp; burglary</dt>
+      <dd>SFPD incident reports, stacked in three groups: <em>larceny theft</em> (the &ldquo;Larceny Theft&rdquo; category &mdash; thefts without force or breaking in, including from vehicles and shoplifting), <em>violent crime</em> (the FBI definition: homicide, rape, robbery, and aggravated assault &mdash; simple assault is not included), and <em>burglary</em> (the &ldquo;Burglary&rdquo; category &mdash; unlawful entry of a building). Motor vehicle theft is not included in any group.</dd>
       <dt>Homelessness-related 311 requests</dt>
       <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing. No prior-year line on this chart: the city only began routing cases this way in mid-2025, so a year-over-year comparison would reflect the process change, not conditions on the street.</dd>
       <dt>Overdose-related 911 responses</dt>
@@ -319,22 +322,36 @@
   function loadPolice() {
     // drugs = every incident whose SUBcategory is "Drug Violation", regardless of
     // parent category (they occur under Drug Offense, Drug Violation, and
-    // Disorderly Conduct)
+    // Disorderly Conduct). violent = FBI definition: homicide, rape, robbery,
+    // and aggravated (not simple) assault.
     return soql("wg3w-h783", {
-      "$select": "incident_date, count(*) as n",
-      "$where": "incident_date>='" + PRIOR_START + "' AND analysis_neighborhood='South of Market'" +
-        " AND incident_subcategory='Drug Violation'",
-      "$group": "incident_date",
-      "$limit": "20000"
+      "$select": "incident_date, incident_category, incident_subcategory, count(*) as n",
+      "$where": "incident_date>='" + PRIOR_START + "' AND analysis_neighborhood='South of Market' AND (" +
+        "incident_subcategory='Drug Violation'" +
+        " OR incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
+        " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
+      "$group": "incident_date, incident_category, incident_subcategory",
+      "$limit": "40000"
     }).then(function (rows) {
-      state.daily.drugs = new Map();
+      ["drugs", "larceny", "violent", "burglary"].forEach(function (k) { state.daily[k] = new Map(); });
       state.prior.drugs = new Map();
+      state.prior.crime = new Map();  // prior-year total of larceny + violent + burglary
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.incident_date).slice(0, 10);
-        var m = day >= START ? state.daily.drugs : state.prior.drugs;
-        if (day >= START && (!maxDay || day > maxDay)) maxDay = day;
-        m.set(day, (m.get(day) || 0) + (+r.n));
+        var n = +r.n;
+        var k = r.incident_subcategory === "Drug Violation" ? "drugs"
+              : r.incident_category === "Larceny Theft" ? "larceny"
+              : r.incident_category === "Burglary" ? "burglary"
+              : "violent";
+        if (day >= START) {
+          if (!maxDay || day > maxDay) maxDay = day;
+          state.daily[k].set(day, (state.daily[k].get(day) || 0) + n);
+        } else if (k === "drugs") {
+          state.prior.drugs.set(day, (state.prior.drugs.get(day) || 0) + n);
+        } else {
+          state.prior.crime.set(day, (state.prior.crime.get(day) || 0) + n);
+        }
       });
       state.through.police = maxDay;
     });
@@ -447,6 +464,15 @@
       ] },
     { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa", priorKey: "drugs",
       title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
+    { id: "crime",    kind: "stack", geo: "SoMa", src: "police",
+      priorKey: "crime", priorName: "Total · same period 2025",
+      title: "Larceny, violent crime & burglary",
+      sub: "SFPD incident reports · violent crime = homicide, rape, robbery, aggravated assault",
+      series: [
+        { key: "larceny",  name: "Larceny theft", color: "var(--s-soma)" },
+        { key: "violent",  name: "Violent crime", color: "var(--s-soma2)" },
+        { key: "burglary", name: "Burglary",      color: "var(--s-soma3)" }
+      ] },
     { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
       title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
