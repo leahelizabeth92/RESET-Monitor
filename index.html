@@ -745,19 +745,19 @@
   btnM.addEventListener("click", function () { setGran("monthly"); });
 
   var themeBtn = document.getElementById("themeBtn");
-  var themes = ["auto", "light", "dark"];
-  function applyTheme(t) {
+  var themes = ["light", "dark", "auto"];
+  function applyTheme(t, save) {
     if (t === "auto") document.documentElement.removeAttribute("data-theme");
     else document.documentElement.setAttribute("data-theme", t);
     themeBtn.textContent = "Theme: " + t.charAt(0).toUpperCase() + t.slice(1);
-    try { localStorage.setItem("soma-theme", t); } catch (e) {}
+    if (save) { try { localStorage.setItem("soma-theme-v2", t); } catch (e) {} }
   }
   var savedTheme = "light";
-  try { savedTheme = localStorage.getItem("soma-theme") || "light"; } catch (e) {}
-  applyTheme(savedTheme);
+  try { savedTheme = localStorage.getItem("soma-theme-v2") || "light"; } catch (e) {}
+  applyTheme(savedTheme, false);
   themeBtn.addEventListener("click", function () {
     var cur = themes.indexOf(themeBtn.textContent.split(": ")[1].toLowerCase());
-    applyTheme(themes[(cur + 1) % 3]);
+    applyTheme(themes[(cur + 1) % 3], true);
   });
 
   /* ---------- boot ---------- */
