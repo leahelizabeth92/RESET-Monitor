@@ -207,7 +207,7 @@
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
-    <p>The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
+    <p>The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed blue line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
     <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
   </section>
 
@@ -373,17 +373,22 @@
     }).then(function (rows) {
       state.daily.suspCallsPublic = new Map();
       state.daily.suspCallsOfficer = new Map();
-      state.prior.suspCalls = new Map();  // prior year keeps the total only
+      state.prior.suspCalls = new Map();        // prior-year total
+      state.prior.suspCallsPublic = new Map();  // prior-year public 911 calls only
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.d).slice(0, 10);
-        var m;
-        if (day < START) m = state.prior.suspCalls;
-        else {
+        var n = +r.n;
+        if (day < START) {
+          state.prior.suspCalls.set(day, (state.prior.suspCalls.get(day) || 0) + n);
+          if (r.onview_flag === "N") {
+            state.prior.suspCallsPublic.set(day, (state.prior.suspCallsPublic.get(day) || 0) + n);
+          }
+        } else {
           if (!maxDay || day > maxDay) maxDay = day;
-          m = r.onview_flag === "N" ? state.daily.suspCallsPublic : state.daily.suspCallsOfficer;
+          var m = r.onview_flag === "N" ? state.daily.suspCallsPublic : state.daily.suspCallsOfficer;
+          m.set(day, (m.get(day) || 0) + n);
         }
-        m.set(day, (m.get(day) || 0) + (+r.n));
       });
       state.through.calls = maxDay;
     });
@@ -430,7 +435,9 @@
 
   /* ---------- chart config ---------- */
   var CHARTS = [
-    { id: "suspcalls", kind: "stack", geo: "SoMa", priorKey: "suspCalls",
+    { id: "suspcalls", kind: "stack", geo: "SoMa",
+      priorKey: "suspCalls", priorName: "Total · same period 2025",
+      priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-soma)",
       title: "“Suspicious person” calls & stops",
       sub: "Dispatched records · excludes cancelled/duplicates (CAN/22/DUP)", src: "calls",
       series: [
@@ -480,16 +487,21 @@
       buckets = buckets.filter(function (b) { return b.start <= through; });
       var pmap = cfg.priorKey && state.prior[cfg.priorKey];
       var prior = pmap ? buckets.map(function (b) { return priorDaily(pmap, b, gran); }) : null;
+      var pmap2 = cfg.priorKey2 && state.prior[cfg.priorKey2];
+      var prior2 = pmap2 ? {
+        name: cfg.prior2Name, color: cfg.prior2Color,
+        values: buckets.map(function (b) { return priorDaily(pmap2, b, gran); })
+      } : null;
       if (cfg.kind === "daily") {
         if (!state.daily[cfg.key]) return null;
-        return { buckets: buckets, values: aggregate(state.daily[cfg.key], buckets), through: through, prior: prior };
+        return { buckets: buckets, values: aggregate(state.daily[cfg.key], buckets), through: through, prior: prior, prior2: prior2 };
       }
       if (cfg.series.some(function (sd) { return !state.daily[sd.key]; })) return null;
       var series = cfg.series.map(function (sd) {
         return { name: sd.name, color: sd.color, values: aggregate(state.daily[sd.key], buckets) };
       });
       return {
-        buckets: buckets, series: series, through: through, prior: prior,
+        buckets: buckets, series: series, through: through, prior: prior, prior2: prior2,
         values: buckets.map(function (_, i) {
           return series.reduce(function (a, sr) { return a + sr.values[i]; }, 0);
         })
@@ -593,7 +605,10 @@
     tooltip.appendChild(p); tooltip.appendChild(v);
     (rows || []).forEach(function (r) {
       var row = document.createElement("div"); row.className = "tt-row";
-      var key = document.createElement("span"); key.className = "tt-key"; key.style.background = r.color;
+      var key = document.createElement("span"); key.className = "tt-key";
+      key.style.background = r.dash
+        ? "repeating-linear-gradient(90deg, " + r.color + " 0, " + r.color + " 3px, transparent 3px, transparent 5px)"
+        : r.color;
       var val = document.createElement("strong"); val.textContent = fmtN(r.val);
       var name = document.createElement("span"); name.className = "tt-name"; name.textContent = r.name;
       row.appendChild(key); row.appendChild(val); row.appendChild(name);
@@ -614,7 +629,10 @@
     var W = 560, H = 232, mL = 40, mR = 10, mT = 20, mB = 26;
     var plotW = W - mL - mR, plotH = H - mT - mB;
     var n = s.values.length;
-    var maxV = Math.max.apply(null, s.values.concat(s.prior ? s.prior.filter(function (p) { return p !== null; }) : []).concat([1]));
+    var maxV = Math.max.apply(null, s.values
+      .concat(s.prior ? s.prior.filter(function (p) { return p !== null; }) : [])
+      .concat(s.prior2 ? s.prior2.values.filter(function (p) { return p !== null; }) : [])
+      .concat([1]));
     var ticks = niceTicks(maxV);
     var yMax = ticks[ticks.length - 1];
     function Y(v) { return mT + plotH - (v / yMax) * plotH; }
@@ -682,13 +700,19 @@
         topY = Y(0) - h1;
       }
 
-      if (s.prior && s.prior[i] !== null) {
-        rows = (rows || []).concat([{ name: PRIOR_LABEL, color: "var(--text-muted)", val: s.prior[i] }]);
-      }
       var aria = s.buckets[i].label + ": " + fmtN(v) +
-        (s.series ? " total — " + rows.filter(function (r) { return r.name !== PRIOR_LABEL; }).map(function (r) { return fmtN(r.val) + " " + r.name; }).join(", ") : "") +
-        (s.prior && s.prior[i] !== null ? "; same period 2025: " + fmtN(s.prior[i]) : "") +
-        (partial ? " (partial period)" : "");
+        (s.series ? " total — " + rows.map(function (r) { return fmtN(r.val) + " " + r.name; }).join(", ") : "");
+      var extraRows = [];
+      if (s.prior && s.prior[i] !== null) {
+        extraRows.push({ name: cfg.priorName || PRIOR_LABEL, color: "var(--text-muted)", val: s.prior[i] });
+        aria += "; " + (cfg.priorName || PRIOR_LABEL).toLowerCase() + ": " + fmtN(s.prior[i]);
+      }
+      if (s.prior2 && s.prior2.values[i] !== null) {
+        extraRows.push({ name: s.prior2.name, color: s.prior2.color, dash: true, val: s.prior2.values[i] });
+        aria += "; " + s.prior2.name.toLowerCase() + ": " + fmtN(s.prior2.values[i]);
+      }
+      if (extraRows.length) rows = (rows || []).concat(extraRows);
+      aria += partial ? " (partial period)" : "";
       var hit = el("rect", {
         x: mL + band * i, y: mT, width: band, height: plotH + mB - 4,
         class: "hit", tabindex: 0, role: "img", "aria-label": aria
@@ -714,20 +738,25 @@
       }
     });
 
-    // prior-year step line: one horizontal segment per bucket at last year's value
-    if (s.prior && s.prior.some(function (p) { return p !== null; })) {
+    // prior-year step lines: one horizontal segment per bucket at last year's value
+    function drawStepLine(vals, stroke, dash) {
+      if (!vals || !vals.some(function (p) { return p !== null; })) return;
       var d = "", pen = false;
-      s.prior.forEach(function (p, i) {
+      vals.forEach(function (p, i) {
         if (p === null) { pen = false; return; }
         var y = Y(p), x0 = mL + band * i, x1 = mL + band * (i + 1);
         d += pen ? "V" + y + "H" + x1 : "M" + x0 + " " + y + "H" + x1;
         pen = true;
       });
-      el("path", {
-        d: d, fill: "none", stroke: "var(--text-muted)", "stroke-width": 2,
+      var attrs = {
+        d: d, fill: "none", stroke: stroke, "stroke-width": 2,
         "stroke-linejoin": "round", "stroke-linecap": "round", "pointer-events": "none"
-      }, svg);
+      };
+      if (dash) attrs["stroke-dasharray"] = "5 4";
+      el("path", attrs, svg);
     }
+    drawStepLine(s.prior, "var(--text-muted)", false);
+    if (s.prior2) drawStepLine(s.prior2.values, s.prior2.color, true);
 
     // event reference line (e.g. center opening), placed at its exact date
     for (var i = 0; i < n; i++) {
@@ -825,13 +854,19 @@
       } else if (hasPrior) {
         legendEntries.push({ name: "2026", color: cfg.color });
       }
-      if (hasPrior) legendEntries.push({ name: PRIOR_LABEL, color: "var(--text-muted)", line: true });
+      if (hasPrior) legendEntries.push({ name: cfg.priorName || PRIOR_LABEL, color: "var(--text-muted)", line: true });
+      if (s.prior2 && s.prior2.values.some(function (p) { return p !== null; })) {
+        legendEntries.push({ name: s.prior2.name, color: s.prior2.color, line: true, dash: true });
+      }
       if (legendEntries.length) {
         var leg = document.createElement("div");
         leg.className = "legend";
         legendEntries.forEach(function (sd) {
           var k = document.createElement("span"); k.className = "key";
-          var sw = document.createElement("span"); sw.className = "sw" + (sd.line ? " line" : ""); sw.style.background = sd.color;
+          var sw = document.createElement("span"); sw.className = "sw" + (sd.line ? " line" : "");
+          sw.style.background = sd.dash
+            ? "repeating-linear-gradient(90deg, " + sd.color + " 0, " + sd.color + " 3px, transparent 3px, transparent 5px)"
+            : sd.color;
           k.appendChild(sw); k.appendChild(document.createTextNode(sd.name));
           leg.appendChild(k);
         });
@@ -850,7 +885,8 @@
       tbl.appendChild(cap);
       var headers = ["Period"].concat(
         s.series ? s.series.map(function (sr) { return sr.name; }).concat(["Total"]) : ["Count"]);
-      if (hasPrior) headers.push(PRIOR_LABEL);
+      if (hasPrior) headers.push(cfg.priorName || PRIOR_LABEL);
+      if (s.prior2) headers.push(s.prior2.name);
       var thead = document.createElement("thead"), trh = document.createElement("tr");
       headers.forEach(function (t, i) {
         var th = document.createElement("th"); th.textContent = t;
@@ -868,6 +904,7 @@
           ? s.series.map(function (sr) { return sr.values[i]; }).concat([s.values[i]])
           : [s.values[i]];
         if (hasPrior) nums.push(s.prior[i]);
+        if (s.prior2) nums.push(s.prior2.values[i]);
         nums.forEach(function (nv) {
           var td = document.createElement("td");
           td.className = "num"; td.textContent = nv === null ? "—" : fmtN(nv);
