@@ -101,6 +101,11 @@
   }
   .seg button[aria-pressed="true"] { background: var(--ghost); color: var(--text-primary); font-weight: 600; }
   .controls .range-note { color: var(--text-muted); font-size: 12.5px; }
+  .cmp-toggle {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; color: var(--text-secondary); cursor: pointer; user-select: none;
+  }
+  .cmp-toggle input { accent-color: var(--s-soma); width: 15px; height: 15px; cursor: pointer; margin: 0; }
 
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
   .tile {
@@ -209,6 +214,7 @@
       <button type="button" id="btnWeekly" aria-pressed="true">Weekly</button>
       <button type="button" id="btnMonthly" aria-pressed="false">Monthly</button>
     </div>
+    <label class="cmp-toggle"><input type="checkbox" id="cmpToggle" checked> Compare neighborhoods</label>
     <span class="range-note" id="rangeNote">Loading data&hellip;</span>
   </div>
 
@@ -337,6 +343,7 @@
 
   var state = {
     gran: "weekly",
+    compare: true,
     hood: "South of Market",
     hoods: {},       // neighborhood -> {daily, prior, through, errors, loaded}
     prior: {},       // citywide prior-year data (EMS weeks, death months)
@@ -571,7 +578,7 @@
         values: buckets.map(function (b) { return priorDaily(pmap2, b, gran); })
       } : null;
       // comparison dots: the other two neighborhoods' totals per bucket
-      var others = HOODS.filter(function (h) { return h.name !== state.hood; })
+      var others = !state.compare ? [] : HOODS.filter(function (h) { return h.name !== state.hood; })
         .map(function (h, idx) {
           var H2 = state.hoods[h.name];
           if (!H2 || !H2.loaded) return null;
@@ -876,11 +883,10 @@
         if (v === null) return;
         var cx = mL + band * (i + 0.5), cy = Y(v);
         if (o.shape === "circle") {
-          el("circle", { cx: cx, cy: cy, r: 4.5, fill: o.color, stroke: "var(--surface-1)", "stroke-width": 2, "pointer-events": "none" }, svg);
+          el("circle", { cx: cx, cy: cy, r: 4.5, fill: o.color, "pointer-events": "none" }, svg);
         } else {
           el("rect", {
-            x: cx - 4, y: cy - 4, width: 8, height: 8, fill: o.color,
-            stroke: "var(--surface-1)", "stroke-width": 2, "pointer-events": "none",
+            x: cx - 4, y: cy - 4, width: 8, height: 8, fill: o.color, "pointer-events": "none",
             transform: "rotate(45 " + cx + " " + cy + ")"
           }, svg);
         }
@@ -1136,6 +1142,15 @@
   }
   btnW.addEventListener("click", function () { setGran("weekly"); });
   btnM.addEventListener("click", function () { setGran("monthly"); });
+
+  var cmpToggle = document.getElementById("cmpToggle");
+  try { state.compare = localStorage.getItem("soma-compare") !== "off"; } catch (e) {}
+  cmpToggle.checked = state.compare;
+  cmpToggle.addEventListener("change", function () {
+    state.compare = cmpToggle.checked;
+    try { localStorage.setItem("soma-compare", state.compare ? "on" : "off"); } catch (e) {}
+    renderAll();
+  });
 
   var themeBtn = document.getElementById("themeBtn");
   var themes = ["light", "dark", "auto"];
