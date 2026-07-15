@@ -506,6 +506,8 @@
       ] },
     { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa", priorKey: "drugs",
       title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
+    { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
+      title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "crime",    kind: "stack", geo: "SoMa", src: "police",
       priorKey: "crime", priorName: "Total · same period 2025",
       title: "Larceny, violent crime & burglary",
@@ -515,8 +517,6 @@
         { key: "violent",  name: "Violent crime", color: "var(--s-soma2)" },
         { key: "burglary", name: "Burglary",      color: "var(--s-soma3)" }
       ] },
-    { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
-      title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
       title: "Overdose-related 911 responses", sub: "EMS responses · published citywide only, ~3-month lag", src: "ems" },
     { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
