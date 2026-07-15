@@ -144,6 +144,7 @@
   .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
   .legend .key { display: inline-flex; align-items: center; gap: 6px; }
   .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .legend .sw.line { height: 3px; border-radius: 2px; }
 
   .bar { transition: filter .08s; }
   .bar.hot { filter: brightness(1.15); }
@@ -200,12 +201,13 @@
       <dt>&ldquo;Suspicious person&rdquo; calls &amp; stops</dt>
       <dd>Law-enforcement dispatched records whose final call type is &ldquo;Suspicious Person,&rdquo; split by who initiated them: <em>911 calls from the public</em> (records where someone called it in) versus <em>officer-initiated &ldquo;on-view&rdquo; records</em>, where an officer or city street team observed something on patrol and generated the record themselves (includes HSOC street-team referrals). The two measure different things &mdash; community reporting versus police activity. Excludes records cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
       <dt>Homelessness-related 311 requests</dt>
-      <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing.</dd>
+      <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing. No prior-year line on this chart: the city only began routing cases this way in mid-2025, so a year-over-year comparison would reflect the process change, not conditions on the street.</dd>
       <dt>Overdose-related 911 responses</dt>
       <dd>Opioid overdose-related 911 calls responded to by ambulances, per SF Emergency Medical Services patient-care records. Citywide only.</dd>
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
+    <p>The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
     <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
   </section>
 
@@ -228,6 +230,8 @@
 (function () {
   "use strict";
   var START = "2026-01-01";
+  var PRIOR_START = "2025-01-01";  // fetch one extra year for the year-over-year line
+  var PRIOR_LABEL = "Same period 2025";
   var SODA = "https://data.sfgov.org/resource/";
 
   /* ---------- date helpers (all on YYYY-MM-DD strings, UTC-anchored) ---------- */
@@ -304,6 +308,7 @@
   var state = {
     gran: "weekly",
     daily: {},       // key -> Map(day -> count)
+    prior: {},       // prior-year data for the year-over-year line
     through: {},     // key -> last day/period with data
     ems: [],         // [{week, n}]
     deaths: [],      // [{month, n}]
@@ -316,17 +321,19 @@
     // Disorderly Conduct)
     return soql("wg3w-h783", {
       "$select": "incident_date, count(*) as n",
-      "$where": "incident_date>='" + START + "' AND analysis_neighborhood='South of Market'" +
+      "$where": "incident_date>='" + PRIOR_START + "' AND analysis_neighborhood='South of Market'" +
         " AND incident_subcategory='Drug Violation'",
       "$group": "incident_date",
       "$limit": "20000"
     }).then(function (rows) {
       state.daily.drugs = new Map();
+      state.prior.drugs = new Map();
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.incident_date).slice(0, 10);
-        if (!maxDay || day > maxDay) maxDay = day;
-        state.daily.drugs.set(day, (state.daily.drugs.get(day) || 0) + (+r.n));
+        var m = day >= START ? state.daily.drugs : state.prior.drugs;
+        if (day >= START && (!maxDay || day > maxDay)) maxDay = day;
+        m.set(day, (m.get(day) || 0) + (+r.n));
       });
       state.through.police = maxDay;
     });
@@ -358,7 +365,7 @@
     // officer or city street team generated the record themselves ("on view").
     return soql("2zdj-bwza", {
       "$select": "date_trunc_ymd(received_datetime) as d, onview_flag, count(*) as n",
-      "$where": "received_datetime>='" + START + "' AND analysis_neighborhood='South of Market'" +
+      "$where": "received_datetime>='" + PRIOR_START + "' AND analysis_neighborhood='South of Market'" +
         " AND call_type_final_desc='SUSPICIOUS PERSON'" +
         " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
       "$group": "d, onview_flag",
@@ -366,11 +373,16 @@
     }).then(function (rows) {
       state.daily.suspCallsPublic = new Map();
       state.daily.suspCallsOfficer = new Map();
+      state.prior.suspCalls = new Map();  // prior year keeps the total only
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.d).slice(0, 10);
-        if (!maxDay || day > maxDay) maxDay = day;
-        var m = r.onview_flag === "N" ? state.daily.suspCallsPublic : state.daily.suspCallsOfficer;
+        var m;
+        if (day < START) m = state.prior.suspCalls;
+        else {
+          if (!maxDay || day > maxDay) maxDay = day;
+          m = r.onview_flag === "N" ? state.daily.suspCallsPublic : state.daily.suspCallsOfficer;
+        }
         m.set(day, (m.get(day) || 0) + (+r.n));
       });
       state.through.calls = maxDay;
@@ -380,12 +392,18 @@
   function loadEms() {
     return soql("ed3a-sn39", {
       "$select": "week_start_date, total_overdose_related_911_calls",
-      "$where": "week_start_date>='" + weekStart(START) + "'",
+      "$where": "week_start_date>='" + addDays(weekStart(START), -364) + "'",
       "$order": "week_start_date",
       "$limit": "500"
     }).then(function (rows) {
-      state.ems = rows.map(function (r) {
-        return { week: String(r.week_start_date).slice(0, 10), n: Math.round(+r.total_overdose_related_911_calls) };
+      state.ems = [];
+      state.prior.emsWeeks = new Map();
+      var cutoff = weekStart(START);
+      rows.forEach(function (r) {
+        var week = String(r.week_start_date).slice(0, 10);
+        var n = Math.round(+r.total_overdose_related_911_calls);
+        if (week >= cutoff) state.ems.push({ week: week, n: n });
+        else state.prior.emsWeeks.set(week, n);
       });
       if (state.ems.length) state.through.ems = addDays(state.ems[state.ems.length - 1].week, 6);
     });
@@ -394,12 +412,17 @@
   function loadDeaths() {
     return soql("jxrr-bmra", {
       "$select": "month_start_date, total_deaths",
-      "$where": "month_start_date>='" + START + "'",
+      "$where": "month_start_date>='" + PRIOR_START + "'",
       "$order": "month_start_date",
       "$limit": "100"
     }).then(function (rows) {
-      state.deaths = rows.map(function (r) {
-        return { month: String(r.month_start_date).slice(0, 10), n: Math.round(+r.total_deaths) };
+      state.deaths = [];
+      state.prior.deathMonths = new Map();
+      rows.forEach(function (r) {
+        var month = String(r.month_start_date).slice(0, 10);
+        var n = Math.round(+r.total_deaths);
+        if (month >= START) state.deaths.push({ month: month, n: n });
+        else state.prior.deathMonths.set(month, n);
       });
       if (state.deaths.length) state.through.deaths = state.deaths[state.deaths.length - 1].month;
     });
@@ -407,14 +430,14 @@
 
   /* ---------- chart config ---------- */
   var CHARTS = [
-    { id: "suspcalls", kind: "stack", geo: "SoMa",
+    { id: "suspcalls", kind: "stack", geo: "SoMa", priorKey: "suspCalls",
       title: "“Suspicious person” calls & stops",
       sub: "Dispatched records · excludes cancelled/duplicates (CAN/22/DUP)", src: "calls",
       series: [
         { key: "suspCallsPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
         { key: "suspCallsOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
       ] },
-    { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa",
+    { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa", priorKey: "drugs",
       title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
     { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
       title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
@@ -423,6 +446,28 @@
     { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
       title: "Drug overdose deaths (preliminary)", sub: "Chief Medical Examiner · citywide only · always monthly", src: "deaths" }
   ];
+
+  /* ---------- year-over-year helpers ---------- */
+  function yearShift(s) { return (+s.slice(0, 4) - 1) + s.slice(4); }
+  function sumRange(map, a, b) {
+    var t = 0;
+    map.forEach(function (n, d) { if (d >= a && d < b) t += n; });
+    return t;
+  }
+  // prior-year count for a bucket: weekly buckets shift 364 days (same weekday),
+  // monthly buckets shift one calendar year; partial buckets compare only the
+  // elapsed portion so the line stays apples-to-apples
+  function priorDaily(map, b, gran) {
+    var s0 = b.start < START ? START : b.start;
+    var e0 = b.endEx;
+    if (b.partial) {
+      var t = addDays(today(), 1);
+      if (t < e0) e0 = t;
+    }
+    return gran === "weekly"
+      ? sumRange(map, addDays(s0, -364), addDays(e0, -364))
+      : sumRange(map, yearShift(s0), yearShift(e0));
+  }
 
   /* ---------- series extraction per chart, honoring granularity ---------- */
   function seriesFor(cfg, gran) {
@@ -433,16 +478,18 @@
       var buckets = makeBuckets(gran, through);
       // drop trailing buckets that start after data ends
       buckets = buckets.filter(function (b) { return b.start <= through; });
+      var pmap = cfg.priorKey && state.prior[cfg.priorKey];
+      var prior = pmap ? buckets.map(function (b) { return priorDaily(pmap, b, gran); }) : null;
       if (cfg.kind === "daily") {
         if (!state.daily[cfg.key]) return null;
-        return { buckets: buckets, values: aggregate(state.daily[cfg.key], buckets), through: through };
+        return { buckets: buckets, values: aggregate(state.daily[cfg.key], buckets), through: through, prior: prior };
       }
       if (cfg.series.some(function (sd) { return !state.daily[sd.key]; })) return null;
       var series = cfg.series.map(function (sd) {
         return { name: sd.name, color: sd.color, values: aggregate(state.daily[sd.key], buckets) };
       });
       return {
-        buckets: buckets, series: series, through: through,
+        buckets: buckets, series: series, through: through, prior: prior,
         values: buckets.map(function (_, i) {
           return series.reduce(function (a, sr) { return a + sr.values[i]; }, 0);
         })
@@ -456,14 +503,23 @@
             return { start: r.week, endEx: addDays(r.week, 7), label: "Week of " + fmtDay(r.week) + (r.week.slice(0,4) !== "2026" ? ", " + r.week.slice(0,4) : ""), short: fmtDay(r.week), partial: r.week < START };
           }),
           values: state.ems.map(function (r) { return r.n; }),
-          through: state.through.ems
+          through: state.through.ems,
+          prior: state.ems.map(function (r) {
+            var p = state.prior.emsWeeks.get(addDays(r.week, -364));
+            return p === undefined ? null : p;
+          })
         };
       }
-      var byMonth = new Map();
+      var byMonth = new Map(), priorByMonth = new Map();
       state.ems.forEach(function (r) {
         if (r.week < START) return;
         var m = monthStart(r.week);
         byMonth.set(m, (byMonth.get(m) || 0) + r.n);
+      });
+      state.prior.emsWeeks.forEach(function (n, week) {
+        if (week < PRIOR_START) return;
+        var m = monthStart(week);
+        priorByMonth.set(m, (priorByMonth.get(m) || 0) + n);
       });
       var months = Array.from(byMonth.keys()).sort();
       var lastEnd = state.through.ems;
@@ -473,7 +529,11 @@
         }),
         values: months.map(function (m) { return byMonth.get(m); }),
         through: state.through.ems,
-        note: "weeks grouped by start date"
+        note: "weeks grouped by start date",
+        prior: months.map(function (m) {
+          var p = priorByMonth.get(yearShift(m));
+          return p === undefined ? null : p;
+        })
       };
     }
     if (cfg.kind === "deaths") {
@@ -484,7 +544,11 @@
         }),
         values: state.deaths.map(function (r) { return r.n; }),
         through: state.through.deaths,
-        monthlyOnly: true
+        monthlyOnly: true,
+        prior: state.deaths.map(function (r) {
+          var p = state.prior.deathMonths.get(yearShift(r.month));
+          return p === undefined ? null : p;
+        })
       };
     }
     return null;
@@ -550,7 +614,7 @@
     var W = 560, H = 232, mL = 40, mR = 10, mT = 20, mB = 26;
     var plotW = W - mL - mR, plotH = H - mT - mB;
     var n = s.values.length;
-    var maxV = Math.max.apply(null, s.values.concat([1]));
+    var maxV = Math.max.apply(null, s.values.concat(s.prior ? s.prior.filter(function (p) { return p !== null; }) : []).concat([1]));
     var ticks = niceTicks(maxV);
     var yMax = ticks[ticks.length - 1];
     function Y(v) { return mT + plotH - (v / yMax) * plotH; }
@@ -618,8 +682,12 @@
         topY = Y(0) - h1;
       }
 
+      if (s.prior && s.prior[i] !== null) {
+        rows = (rows || []).concat([{ name: PRIOR_LABEL, color: "var(--text-muted)", val: s.prior[i] }]);
+      }
       var aria = s.buckets[i].label + ": " + fmtN(v) +
-        (s.series ? " total — " + rows.map(function (r) { return fmtN(r.val) + " " + r.name; }).join(", ") : "") +
+        (s.series ? " total — " + rows.filter(function (r) { return r.name !== PRIOR_LABEL; }).map(function (r) { return fmtN(r.val) + " " + r.name; }).join(", ") : "") +
+        (s.prior && s.prior[i] !== null ? "; same period 2025: " + fmtN(s.prior[i]) : "") +
         (partial ? " (partial period)" : "");
       var hit = el("rect", {
         x: mL + band * i, y: mT, width: band, height: plotH + mB - 4,
@@ -645,6 +713,21 @@
           .textContent = fmtN(v);
       }
     });
+
+    // prior-year step line: one horizontal segment per bucket at last year's value
+    if (s.prior && s.prior.some(function (p) { return p !== null; })) {
+      var d = "", pen = false;
+      s.prior.forEach(function (p, i) {
+        if (p === null) { pen = false; return; }
+        var y = Y(p), x0 = mL + band * i, x1 = mL + band * (i + 1);
+        d += pen ? "V" + y + "H" + x1 : "M" + x0 + " " + y + "H" + x1;
+        pen = true;
+      });
+      el("path", {
+        d: d, fill: "none", stroke: "var(--text-muted)", "stroke-width": 2,
+        "stroke-linejoin": "round", "stroke-linecap": "round", "pointer-events": "none"
+      }, svg);
+    }
 
     // event reference line (e.g. center opening), placed at its exact date
     for (var i = 0; i < n; i++) {
@@ -735,12 +818,20 @@
         thru.textContent = "";
         return;
       }
+      var hasPrior = s.prior && s.prior.some(function (p) { return p !== null; });
+      var legendEntries = [];
       if (cfg.series) {
+        cfg.series.forEach(function (sd) { legendEntries.push({ name: sd.name, color: sd.color }); });
+      } else if (hasPrior) {
+        legendEntries.push({ name: "2026", color: cfg.color });
+      }
+      if (hasPrior) legendEntries.push({ name: PRIOR_LABEL, color: "var(--text-muted)", line: true });
+      if (legendEntries.length) {
         var leg = document.createElement("div");
         leg.className = "legend";
-        cfg.series.forEach(function (sd) {
+        legendEntries.forEach(function (sd) {
           var k = document.createElement("span"); k.className = "key";
-          var sw = document.createElement("span"); sw.className = "sw"; sw.style.background = sd.color;
+          var sw = document.createElement("span"); sw.className = "sw" + (sd.line ? " line" : ""); sw.style.background = sd.color;
           k.appendChild(sw); k.appendChild(document.createTextNode(sd.name));
           leg.appendChild(k);
         });
@@ -759,6 +850,7 @@
       tbl.appendChild(cap);
       var headers = ["Period"].concat(
         s.series ? s.series.map(function (sr) { return sr.name; }).concat(["Total"]) : ["Count"]);
+      if (hasPrior) headers.push(PRIOR_LABEL);
       var thead = document.createElement("thead"), trh = document.createElement("tr");
       headers.forEach(function (t, i) {
         var th = document.createElement("th"); th.textContent = t;
@@ -775,9 +867,10 @@
         var nums = s.series
           ? s.series.map(function (sr) { return sr.values[i]; }).concat([s.values[i]])
           : [s.values[i]];
+        if (hasPrior) nums.push(s.prior[i]);
         nums.forEach(function (nv) {
           var td = document.createElement("td");
-          td.className = "num"; td.textContent = fmtN(nv);
+          td.className = "num"; td.textContent = nv === null ? "—" : fmtN(nv);
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
