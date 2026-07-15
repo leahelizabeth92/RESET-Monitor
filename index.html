@@ -752,8 +752,8 @@
     themeBtn.textContent = "Theme: " + t.charAt(0).toUpperCase() + t.slice(1);
     try { localStorage.setItem("soma-theme", t); } catch (e) {}
   }
-  var savedTheme = "auto";
-  try { savedTheme = localStorage.getItem("soma-theme") || "auto"; } catch (e) {}
+  var savedTheme = "light";
+  try { savedTheme = localStorage.getItem("soma-theme") || "light"; } catch (e) {}
   applyTheme(savedTheme);
   themeBtn.addEventListener("click", function () {
     var cur = themes.indexOf(themeBtn.textContent.split(": ")[1].toLowerCase());
