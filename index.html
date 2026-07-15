@@ -19,6 +19,8 @@
     --s-soma2:        #1baf7a;
     --s-soma3:        #c98500;
     --s-prior2:       #c98500;
+    --dot-a:          #d55181;
+    --dot-b:          #4a3aa7;
     --s-city:         #eb6834;
     --delta-bad:      #d03b3b;
     --delta-good:     #006300;
@@ -37,6 +39,7 @@
       --border:         rgba(255,255,255,0.10);
       --s-soma:         #3987e5;
       --s-soma2:        #199e70;
+      --dot-b:          #9085e9;
       --s-city:         #d95926;
       --delta-bad:      #e66767;
       --delta-good:     #0ca30c;
@@ -55,6 +58,7 @@
     --border:         rgba(255,255,255,0.10);
     --s-soma:         #3987e5;
     --s-soma2:        #199e70;
+    --dot-b:          #9085e9;
     --s-city:         #d95926;
     --delta-bad:      #e66767;
     --delta-good:     #0ca30c;
@@ -157,6 +161,10 @@
   .legend .key { display: inline-flex; align-items: center; gap: 6px; }
   .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
   .legend .sw.line { height: 3px; border-radius: 2px; }
+  .legend .sw.circle { width: 9px; height: 9px; border-radius: 50%; }
+  .legend .sw.diamond { width: 8px; height: 8px; border-radius: 1px; transform: rotate(45deg); }
+  .tooltip .tt-key.circle { width: 8px; height: 8px; border-radius: 50%; }
+  .tooltip .tt-key.diamond { width: 7px; height: 7px; border-radius: 1px; transform: rotate(45deg); }
 
   .bar { transition: filter .08s; }
   .bar.hot { filter: brightness(1.15); }
@@ -223,7 +231,7 @@
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
-    <p>The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
+    <p>The circle and diamond dots on each neighborhood chart show the other two neighborhoods&rsquo; totals for the same period, for side-by-side comparison (also listed in each chart&rsquo;s tooltip and table). The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
     <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
   </section>
 
@@ -562,16 +570,42 @@
         name: cfg.prior2Name, color: cfg.prior2Color,
         values: buckets.map(function (b) { return priorDaily(pmap2, b, gran); })
       } : null;
+      // comparison dots: the other two neighborhoods' totals per bucket
+      var others = HOODS.filter(function (h) { return h.name !== state.hood; })
+        .map(function (h, idx) {
+          var H2 = state.hoods[h.name];
+          if (!H2 || !H2.loaded) return null;
+          var vals;
+          if (cfg.kind === "daily") {
+            if (!H2.daily[cfg.key]) return null;
+            vals = aggregate(H2.daily[cfg.key], buckets);
+          } else {
+            if (cfg.series.some(function (sd) { return !H2.daily[sd.key]; })) return null;
+            var per = cfg.series.map(function (sd) { return aggregate(H2.daily[sd.key], buckets); });
+            vals = buckets.map(function (_, i) {
+              return per.reduce(function (a, p) { return a + p[i]; }, 0);
+            });
+          }
+          var thru2 = H2.through[cfg.src];
+          vals = vals.map(function (v, i) { return (thru2 && buckets[i].start <= thru2) ? v : null; });
+          return {
+            name: h.short,
+            color: idx === 0 ? "var(--dot-a)" : "var(--dot-b)",
+            shape: idx === 0 ? "circle" : "diamond",
+            values: vals
+          };
+        }).filter(Boolean);
+      if (!others.length) others = null;
       if (cfg.kind === "daily") {
         if (!H.daily[cfg.key]) return null;
-        return { buckets: buckets, values: aggregate(H.daily[cfg.key], buckets), through: through, prior: prior, prior2: prior2 };
+        return { buckets: buckets, values: aggregate(H.daily[cfg.key], buckets), through: through, prior: prior, prior2: prior2, others: others };
       }
       if (cfg.series.some(function (sd) { return !H.daily[sd.key]; })) return null;
       var series = cfg.series.map(function (sd) {
         return { name: sd.name, color: sd.color, values: aggregate(H.daily[sd.key], buckets) };
       });
       return {
-        buckets: buckets, series: series, through: through, prior: prior, prior2: prior2,
+        buckets: buckets, series: series, through: through, prior: prior, prior2: prior2, others: others,
         values: buckets.map(function (_, i) {
           return series.reduce(function (a, sr) { return a + sr.values[i]; }, 0);
         })
@@ -675,7 +709,7 @@
     tooltip.appendChild(p); tooltip.appendChild(v);
     (rows || []).forEach(function (r) {
       var row = document.createElement("div"); row.className = "tt-row";
-      var key = document.createElement("span"); key.className = "tt-key";
+      var key = document.createElement("span"); key.className = "tt-key" + (r.shape ? " " + r.shape : "");
       key.style.background = r.dash
         ? "repeating-linear-gradient(90deg, " + r.color + " 0, " + r.color + " 3px, transparent 3px, transparent 5px)"
         : r.color;
@@ -702,6 +736,9 @@
     var maxV = Math.max.apply(null, s.values
       .concat(s.prior ? s.prior.filter(function (p) { return p !== null; }) : [])
       .concat(s.prior2 ? s.prior2.values.filter(function (p) { return p !== null; }) : [])
+      .concat(s.others ? s.others.reduce(function (a, o) {
+        return a.concat(o.values.filter(function (p) { return p !== null; }));
+      }, []) : [])
       .concat([1]));
     var ticks = niceTicks(maxV);
     var yMax = ticks[ticks.length - 1];
@@ -781,6 +818,11 @@
         extraRows.push({ name: s.prior2.name, color: s.prior2.color, dash: true, val: s.prior2.values[i] });
         aria += "; " + s.prior2.name.toLowerCase() + ": " + fmtN(s.prior2.values[i]);
       }
+      (s.others || []).forEach(function (o) {
+        if (o.values[i] === null) return;
+        extraRows.push({ name: o.name, color: o.color, shape: o.shape, val: o.values[i] });
+        aria += "; " + o.name + ": " + fmtN(o.values[i]);
+      });
       if (extraRows.length) rows = (rows || []).concat(extraRows);
       aria += partial ? " (partial period)" : "";
       var hit = el("rect", {
@@ -827,6 +869,23 @@
     }
     drawStepLine(s.prior, "var(--text-muted)", false);
     if (s.prior2) drawStepLine(s.prior2.values, s.prior2.color, true);
+
+    // comparison dots for the other neighborhoods, with a 2px surface ring
+    (s.others || []).forEach(function (o) {
+      o.values.forEach(function (v, i) {
+        if (v === null) return;
+        var cx = mL + band * (i + 0.5), cy = Y(v);
+        if (o.shape === "circle") {
+          el("circle", { cx: cx, cy: cy, r: 4.5, fill: o.color, stroke: "var(--surface-1)", "stroke-width": 2, "pointer-events": "none" }, svg);
+        } else {
+          el("rect", {
+            x: cx - 4, y: cy - 4, width: 8, height: 8, fill: o.color,
+            stroke: "var(--surface-1)", "stroke-width": 2, "pointer-events": "none",
+            transform: "rotate(45 " + cx + " " + cy + ")"
+          }, svg);
+        }
+      });
+    });
 
     // event reference line (e.g. center opening), placed at its exact date
     for (var i = 0; i < n; i++) {
@@ -930,12 +989,18 @@
       if (s.prior2 && s.prior2.values.some(function (p) { return p !== null; })) {
         legendEntries.push({ name: s.prior2.name, color: s.prior2.color, line: true, dash: true });
       }
+      (s.others || []).forEach(function (o) {
+        legendEntries.push({ name: o.name, color: o.color, shape: o.shape });
+      });
+      if (s.others && !cfg.series && !legendEntries.some(function (e) { return e.name === "2026"; })) {
+        legendEntries.unshift({ name: curShort() + " 2026", color: cfg.color });
+      }
       if (legendEntries.length) {
         var leg = document.createElement("div");
         leg.className = "legend";
         legendEntries.forEach(function (sd) {
           var k = document.createElement("span"); k.className = "key";
-          var sw = document.createElement("span"); sw.className = "sw" + (sd.line ? " line" : "");
+          var sw = document.createElement("span"); sw.className = "sw" + (sd.line ? " line" : "") + (sd.shape ? " " + sd.shape : "");
           sw.style.background = sd.dash
             ? "repeating-linear-gradient(90deg, " + sd.color + " 0, " + sd.color + " 3px, transparent 3px, transparent 5px)"
             : sd.color;
@@ -959,6 +1024,7 @@
         s.series ? s.series.map(function (sr) { return sr.name; }).concat(["Total"]) : ["Count"]);
       if (hasPrior) headers.push(cfg.priorName || PRIOR_LABEL);
       if (s.prior2) headers.push(s.prior2.name);
+      (s.others || []).forEach(function (o) { headers.push(o.name); });
       var thead = document.createElement("thead"), trh = document.createElement("tr");
       headers.forEach(function (t, i) {
         var th = document.createElement("th"); th.textContent = t;
@@ -977,6 +1043,7 @@
           : [s.values[i]];
         if (hasPrior) nums.push(s.prior[i]);
         if (s.prior2) nums.push(s.prior2.values[i]);
+        (s.others || []).forEach(function (o) { nums.push(o.values[i]); });
         nums.forEach(function (nv) {
           var td = document.createElement("td");
           td.className = "num"; td.textContent = nv === null ? "—" : fmtN(nv);
@@ -1146,7 +1213,14 @@
     loadHood(savedHood),
     loadEms().catch(function (e) { state.errors.ems = e.message; }),
     loadDeaths().catch(function (e) { state.errors.deaths = e.message; })
-  ]).then(renderAll);
+  ]).then(function () {
+    renderAll();
+    // prefetch the other neighborhoods so the comparison dots (and instant
+    // tab switches) are available; re-render once they arrive
+    var rest = HOODS.filter(function (h) { return h.name !== savedHood; })
+      .map(function (h) { return loadHood(h.name); });
+    Promise.allSettled(rest).then(renderAll);
+  });
 })();
 </script>
 </body>
