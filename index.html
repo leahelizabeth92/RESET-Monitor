@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoMa Drug Activity &amp; Street Conditions</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --s-soma:         #2a78d6;
+    --s-city:         #eb6834;
+    --delta-bad:      #d03b3b;
+    --delta-good:     #006300;
+    --ghost:          rgba(11,11,11,0.045);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --s-soma:         #3987e5;
+      --s-city:         #d95926;
+      --delta-bad:      #e66767;
+      --delta-good:     #0ca30c;
+      --ghost:          rgba(255,255,255,0.06);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --s-soma:         #3987e5;
+    --s-city:         #d95926;
+    --delta-bad:      #e66767;
+    --delta-good:     #0ca30c;
+    --ghost:          rgba(255,255,255,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 48px; }
+
+  header.page { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+  h1 { font-size: 21px; font-weight: 650; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .page-sub { color: var(--text-secondary); font-size: 13px; margin: 0; }
+  .theme-btn {
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+  .theme-btn:hover { background: var(--ghost); }
+
+  .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 18px 0 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-secondary);
+    font: inherit; font-size: 13px; padding: 7px 16px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ghost); color: var(--text-primary); font-weight: 600; }
+  .controls .range-note { color: var(--text-muted); font-size: 12.5px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px 12px;
+  }
+  .tile .t-label { font-size: 12.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .tile .t-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .tile .t-value { font-size: 30px; font-weight: 600; margin-top: 2px; line-height: 1.15; }
+  .tile .t-delta { font-size: 12px; margin-top: 3px; color: var(--text-muted); }
+  .tile .t-delta .up   { color: var(--delta-bad);  font-weight: 600; }
+  .tile .t-delta .down { color: var(--delta-good); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 14px; }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px 10px; position: relative;
+  }
+  .card h2 { font-size: 14.5px; font-weight: 650; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .badge {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .card .sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 6px; }
+  .card svg { display: block; width: 100%; height: auto; }
+  .card .foot {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11.5px; color: var(--text-muted); margin-top: 4px; gap: 8px;
+  }
+  .tbl-btn {
+    border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 11.5px;
+    cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 2px 0;
+  }
+  .tbl-btn:hover { color: var(--text-secondary); }
+  .card table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0 4px; }
+  .card table caption { text-align: left; font-size: 11.5px; color: var(--text-muted); padding-bottom: 4px; }
+  .card th, .card td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--grid); }
+  .card td.num, .card th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .card .status { font-size: 12.5px; color: var(--text-muted); padding: 34px 0; text-align: center; }
+  .card .status.error { color: var(--delta-bad); }
+
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+    padding: 7px 10px; font-size: 12px; min-width: 120px;
+  }
+  .tooltip .tt-period { color: var(--text-secondary); }
+  .tooltip .tt-value { font-size: 16px; font-weight: 650; }
+  .tooltip .tt-note { color: var(--text-muted); font-size: 11px; }
+
+  .bar { transition: filter .08s; }
+  .bar.hot { filter: brightness(1.15); }
+  .hit { fill: transparent; }
+  .hit:focus { outline: none; }
+  .hit:focus-visible + .bar, .hit:focus + .bar { filter: brightness(1.15); }
+
+  footer.page {
+    margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--grid);
+    font-size: 12px; color: var(--text-muted);
+  }
+  footer.page a { color: var(--text-secondary); }
+  footer.page p { margin: 4px 0; }
+
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div>
+      <h1>SoMa Drug Activity &amp; Street Conditions</h1>
+      <p class="page-sub">South of Market Analysis Neighborhood, San Francisco &middot; live from DataSF open data &middot; Jan&nbsp;1,&nbsp;2026&nbsp;&ndash;&nbsp;present</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button">Theme: Auto</button>
+  </header>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Time granularity">
+      <button type="button" id="btnWeekly" aria-pressed="true">Weekly</button>
+      <button type="button" id="btnMonthly" aria-pressed="false">Monthly</button>
+    </div>
+    <span class="range-note" id="rangeNote">Loading data&hellip;</span>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="grid" id="grid"></div>
+
+  <footer class="page">
+    <p><strong>Sources (SF Open Data portal):</strong>
+      <a href="https://data.sfgov.org/d/wg3w-h783" target="_blank" rel="noopener">Police Incident Reports</a> &middot;
+      <a href="https://data.sfgov.org/d/vw6y-z8j6" target="_blank" rel="noopener">311 Cases</a> &middot;
+      <a href="https://data.sfgov.org/d/ed3a-sn39" target="_blank" rel="noopener">Overdose-Related 911 Responses (EMS)</a> &middot;
+      <a href="https://data.sfgov.org/d/jxrr-bmra" target="_blank" rel="noopener">Preliminary Unintentional Drug Overdose Deaths</a>
+    </p>
+    <p>SoMa = the city&rsquo;s &ldquo;South of Market&rdquo; analysis neighborhood. Overdose 911 responses and overdose deaths are published citywide only &mdash; DPH releases neighborhood-level overdose data solely in quarterly PDF reports. Police and 311 counts reflect reports/dispatches, not verified incidents, and recent days may still be loading into the city portal. Death counts are preliminary medical-examiner determinations and are revised. EMS overdose data is published on a ~3-month lag.</p>
+    <p>Charts refresh with the latest city data every time this page is opened.</p>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+  var START = "2026-01-01";
+  var SODA = "https://data.sfgov.org/resource/";
+
+  /* ---------- date helpers (all on YYYY-MM-DD strings, UTC-anchored) ---------- */
+  function d2s(d) { return d.toISOString().slice(0, 10); }
+  function s2d(s) { return new Date(s + "T00:00:00Z"); }
+  function today() {
+    var n = new Date();
+    return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0");
+  }
+  function addDays(s, n) { var d = s2d(s); d.setUTCDate(d.getUTCDate() + n); return d2s(d); }
+  function weekStart(s) { var d = s2d(s); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d2s(d); } // Sunday
+  function monthStart(s) { return s.slice(0, 8) + "01"; }
+  function nextMonth(s) {
+    var y = +s.slice(0, 4), m = +s.slice(5, 7);
+    m += 1; if (m > 12) { m = 1; y += 1; }
+    return y + "-" + String(m).padStart(2, "0") + "-01";
+  }
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtDay(s) { return MONTHS[+s.slice(5, 7) - 1] + " " + (+s.slice(8, 10)); }
+  function fmtMonth(s) { return MONTHS[+s.slice(5, 7) - 1] + " " + s.slice(0, 4); }
+  function fmtN(n) { return n.toLocaleString("en-US"); }
+
+  /* ---------- bucket construction ---------- */
+  // Buckets from Jan 1 2026 through `through` (a day string). gran: 'weekly'|'monthly'
+  function makeBuckets(gran, through) {
+    var out = [], cur, end, tw = today();
+    if (gran === "weekly") {
+      cur = weekStart(START);
+      while (cur <= through) {
+        end = addDays(cur, 6);
+        out.push({
+          start: cur, endEx: addDays(cur, 7),
+          label: "Week of " + fmtDay(cur) + (cur.slice(0,4) !== "2026" ? ", " + cur.slice(0,4) : ""),
+          short: fmtDay(cur),
+          partial: (cur < START) || (end >= tw)
+        });
+        cur = addDays(cur, 7);
+      }
+    } else {
+      cur = monthStart(START);
+      while (cur <= through) {
+        var nm = nextMonth(cur);
+        out.push({
+          start: cur, endEx: nm,
+          label: fmtMonth(cur), short: MONTHS[+cur.slice(5, 7) - 1],
+          partial: addDays(nm, -1) >= tw
+        });
+        cur = nm;
+      }
+    }
+    return out;
+  }
+  function aggregate(dailyMap, buckets) {
+    return buckets.map(function (b) {
+      var sum = 0;
+      dailyMap.forEach(function (n, day) {
+        if (day >= b.start && day < b.endEx && day >= START) sum += n;
+      });
+      return sum;
+    });
+  }
+
+  /* ---------- fetch ---------- */
+  function soql(dataset, params) {
+    var q = Object.keys(params).map(function (k) {
+      return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+    }).join("&");
+    return fetch(SODA + dataset + ".json?" + q).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status + " from " + dataset);
+      return r.json();
+    });
+  }
+
+  var state = {
+    gran: "weekly",
+    daily: {},       // key -> Map(day -> count)
+    through: {},     // key -> last day/period with data
+    ems: [],         // [{week, n}]
+    deaths: [],      // [{month, n}]
+    errors: {}
+  };
+
+  var POLICE_GROUPS = {
+    drugs:    ["Drug Offense", "Drug Violation"],
+    susp:     ["Suspicious Occ", "Suspicious"],
+    disorder: ["Disorderly Conduct", "Civil Sidewalks"]
+  };
+
+  function loadPolice() {
+    var cats = [].concat(POLICE_GROUPS.drugs, POLICE_GROUPS.susp, POLICE_GROUPS.disorder);
+    return soql("wg3w-h783", {
+      "$select": "incident_date, incident_category, count(*) as n",
+      "$where": "incident_date>='" + START + "' AND analysis_neighborhood='South of Market' AND incident_category in(" +
+        cats.map(function (c) { return "'" + c + "'"; }).join(",") + ")",
+      "$group": "incident_date, incident_category",
+      "$limit": "20000"
+    }).then(function (rows) {
+      ["drugs", "susp", "disorder"].forEach(function (k) { state.daily[k] = new Map(); });
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.incident_date).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        Object.keys(POLICE_GROUPS).forEach(function (k) {
+          if (POLICE_GROUPS[k].indexOf(r.incident_category) >= 0) {
+            var m = state.daily[k];
+            m.set(day, (m.get(day) || 0) + (+r.n));
+          }
+        });
+      });
+      state.through.police = maxDay;
+    });
+  }
+
+  function loadThreeOneOne() {
+    return soql("vw6y-z8j6", {
+      "$select": "date_trunc_ymd(requested_datetime) as d, count(*) as n",
+      "$where": "requested_datetime>='" + START + "' AND analysis_neighborhood='South of Market'" +
+        " AND service_name='General Request' AND service_subtype='homelessness_and_supportive_housing'",
+      "$group": "d",
+      "$limit": "20000"
+    }).then(function (rows) {
+      state.daily.homeless = new Map();
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        state.daily.homeless.set(day, (state.daily.homeless.get(day) || 0) + (+r.n));
+      });
+      state.through.t311 = maxDay;
+    });
+  }
+
+  function loadEms() {
+    return soql("ed3a-sn39", {
+      "$select": "week_start_date, total_overdose_related_911_calls",
+      "$where": "week_start_date>='" + weekStart(START) + "'",
+      "$order": "week_start_date",
+      "$limit": "500"
+    }).then(function (rows) {
+      state.ems = rows.map(function (r) {
+        return { week: String(r.week_start_date).slice(0, 10), n: Math.round(+r.total_overdose_related_911_calls) };
+      });
+      if (state.ems.length) state.through.ems = addDays(state.ems[state.ems.length - 1].week, 6);
+    });
+  }
+
+  function loadDeaths() {
+    return soql("jxrr-bmra", {
+      "$select": "month_start_date, total_deaths",
+      "$where": "month_start_date>='" + START + "'",
+      "$order": "month_start_date",
+      "$limit": "100"
+    }).then(function (rows) {
+      state.deaths = rows.map(function (r) {
+        return { month: String(r.month_start_date).slice(0, 10), n: Math.round(+r.total_deaths) };
+      });
+      if (state.deaths.length) state.through.deaths = state.deaths[state.deaths.length - 1].month;
+    });
+  }
+
+  /* ---------- chart config ---------- */
+  var CHARTS = [
+    { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa",
+      title: "Drug offenses", sub: "SFPD incident reports · “Drug Offense” + “Drug Violation” categories", src: "police" },
+    { id: "susp",     kind: "daily", key: "susp",     color: "var(--s-soma)", geo: "SoMa",
+      title: "“Suspicious occurrence” incidents", sub: "SFPD incident reports · “Suspicious Occ” category", src: "police" },
+    { id: "disorder", kind: "daily", key: "disorder", color: "var(--s-soma)", geo: "SoMa",
+      title: "Street disorder incidents", sub: "SFPD incident reports · Disorderly Conduct + Civil Sidewalks (sit/lie)", src: "police" },
+    { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
+      title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
+    { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
+      title: "Overdose-related 911 responses", sub: "EMS responses · published citywide only, ~3-month lag", src: "ems" },
+    { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
+      title: "Drug overdose deaths (preliminary)", sub: "Chief Medical Examiner · citywide only · always monthly", src: "deaths" }
+  ];
+
+  /* ---------- series extraction per chart, honoring granularity ---------- */
+  function seriesFor(cfg, gran) {
+    // returns {buckets:[{label, short, partial}], values:[n], through, note}
+    if (cfg.kind === "daily") {
+      var through = state.through[cfg.src];
+      if (!through || !state.daily[cfg.key]) return null;
+      var buckets = makeBuckets(gran, through);
+      // drop trailing buckets that start after data ends
+      buckets = buckets.filter(function (b) { return b.start <= through; });
+      return { buckets: buckets, values: aggregate(state.daily[cfg.key], buckets), through: through };
+    }
+    if (cfg.kind === "ems") {
+      if (!state.ems.length) return null;
+      if (gran === "weekly") {
+        return {
+          buckets: state.ems.map(function (r) {
+            return { start: r.week, endEx: addDays(r.week, 7), label: "Week of " + fmtDay(r.week) + (r.week.slice(0,4) !== "2026" ? ", " + r.week.slice(0,4) : ""), short: fmtDay(r.week), partial: r.week < START };
+          }),
+          values: state.ems.map(function (r) { return r.n; }),
+          through: state.through.ems
+        };
+      }
+      var byMonth = new Map();
+      state.ems.forEach(function (r) {
+        if (r.week < START) return;
+        var m = monthStart(r.week);
+        byMonth.set(m, (byMonth.get(m) || 0) + r.n);
+      });
+      var months = Array.from(byMonth.keys()).sort();
+      var lastEnd = state.through.ems;
+      return {
+        buckets: months.map(function (m) {
+          return { start: m, endEx: nextMonth(m), label: fmtMonth(m), short: MONTHS[+m.slice(5,7)-1], partial: addDays(nextMonth(m), -1) > lastEnd };
+        }),
+        values: months.map(function (m) { return byMonth.get(m); }),
+        through: state.through.ems,
+        note: "weeks grouped by start date"
+      };
+    }
+    if (cfg.kind === "deaths") {
+      if (!state.deaths.length) return null;
+      return {
+        buckets: state.deaths.map(function (r) {
+          return { start: r.month, endEx: nextMonth(r.month), label: fmtMonth(r.month), short: MONTHS[+r.month.slice(5,7)-1], partial: false };
+        }),
+        values: state.deaths.map(function (r) { return r.n; }),
+        through: state.through.deaths,
+        monthlyOnly: true
+      };
+    }
+    return null;
+  }
+
+  /* ---------- SVG column chart ---------- */
+  var NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function niceTicks(max) {
+    if (max <= 0) return [0, 1];
+    var raw = max / 3.5, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var step = [1, 2, 5, 10].map(function (s) { return s * mag; })
+      .find(function (s) { return s >= raw; }) || 10 * mag;
+    var ticks = [];
+    for (var v = 0; v <= max + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+    if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+    return ticks;
+  }
+  function barPath(x, y0, w, h, r) {
+    if (h <= 0) return "";
+    r = Math.min(r, w / 2, h);
+    return "M" + x + " " + y0 +
+      " V" + (y0 - h + r) +
+      " a" + r + " " + r + " 0 0 1 " + r + " " + (-r) +
+      " h" + (w - 2 * r) +
+      " a" + r + " " + r + " 0 0 1 " + r + " " + r +
+      " V" + y0 + " Z";
+  }
+
+  var EVENT = { date: "2026-05-04", label: "RESET Center opened · May 4" };
+
+  var tooltip = document.getElementById("tooltip");
+  function showTip(anchorRect, period, value, note) {
+    tooltip.replaceChildren();
+    var p = document.createElement("div"); p.className = "tt-period"; p.textContent = period;
+    var v = document.createElement("div"); v.className = "tt-value"; v.textContent = fmtN(value);
+    tooltip.appendChild(p); tooltip.appendChild(v);
+    if (note) { var nn = document.createElement("div"); nn.className = "tt-note"; nn.textContent = note; tooltip.appendChild(nn); }
+    tooltip.style.display = "block";
+    var tw = tooltip.offsetWidth, thh = tooltip.offsetHeight;
+    var x = anchorRect.left + anchorRect.width / 2 - tw / 2 + window.scrollX;
+    x = Math.max(6, Math.min(x, window.scrollX + document.documentElement.clientWidth - tw - 6));
+    var y = anchorRect.top + window.scrollY - thh - 8;
+    if (y < window.scrollY + 4) y = anchorRect.bottom + window.scrollY + 8;
+    tooltip.style.left = x + "px"; tooltip.style.top = y + "px";
+  }
+  function hideTip() { tooltip.style.display = "none"; }
+
+  function renderChart(container, cfg, s) {
+    var W = 560, H = 232, mL = 40, mR = 10, mT = 20, mB = 26;
+    var plotW = W - mL - mR, plotH = H - mT - mB;
+    var n = s.values.length;
+    var maxV = Math.max.apply(null, s.values.concat([1]));
+    var ticks = niceTicks(maxV);
+    var yMax = ticks[ticks.length - 1];
+    function Y(v) { return mT + plotH - (v / yMax) * plotH; }
+
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    var latestIdx = n - 1;
+    svg.setAttribute("aria-label", cfg.title + ", " + (s.monthlyOnly ? "monthly" : state.gran) + " counts. " +
+      "Latest " + s.buckets[latestIdx].label + ": " + fmtN(s.values[latestIdx]) + ". Use the table button for all values.");
+
+    ticks.forEach(function (t) {
+      var y = Y(t);
+      if (t > 0) el("line", { x1: mL, x2: W - mR, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: mL - 6, y: y + 3.5, "text-anchor": "end", "font-size": 10.5, fill: "var(--text-muted)", style: "font-variant-numeric: tabular-nums" }, svg)
+        .textContent = fmtN(t);
+    });
+    el("line", { x1: mL, x2: W - mR, y1: Y(0), y2: Y(0), stroke: "var(--baseline)", "stroke-width": 1 }, svg);
+
+    var band = plotW / n;
+    var barW = Math.min(24, Math.max(3, band - 2));
+    var maxIdx = s.values.indexOf(Math.max.apply(null, s.values));
+
+    // x labels: monthly -> all; weekly -> first bucket of each month, min 3 bands apart
+    var lastMonth = "", lastLabeled = -10;
+    s.buckets.forEach(function (b, i) {
+      var show, txt;
+      if (n <= 13) { show = true; txt = b.short; }
+      else {
+        var m = b.short.split(" ")[0];
+        txt = m;
+        show = m !== lastMonth && (i - lastLabeled >= 3);
+        lastMonth = m;
+        if (show) lastLabeled = i;
+      }
+      if (show) {
+        el("text", { x: mL + band * i + band / 2, y: H - 8, "text-anchor": "middle", "font-size": 10.5, fill: "var(--text-muted)" }, svg)
+          .textContent = txt;
+      }
+    });
+
+    s.values.forEach(function (v, i) {
+      var x = mL + band * i + (band - barW) / 2;
+      var h = (v / yMax) * plotH;
+      var bar = el("path", {
+        d: barPath(x, Y(0), barW, h, 4),
+        fill: cfg.color, class: "bar",
+        "fill-opacity": s.buckets[i].partial ? 0.45 : 1
+      });
+      var hit = el("rect", {
+        x: mL + band * i, y: mT, width: band, height: plotH + mB - 4,
+        class: "hit", tabindex: 0, role: "img",
+        "aria-label": s.buckets[i].label + ": " + fmtN(v) + (s.buckets[i].partial ? " (partial period)" : "")
+      });
+      svg.appendChild(hit); svg.appendChild(bar);
+      function on() {
+        bar.classList.add("hot");
+        showTip(hit.getBoundingClientRect(), s.buckets[i].label, v,
+          s.buckets[i].partial ? "Partial period — still accumulating" : null);
+      }
+      function off() { bar.classList.remove("hot"); hideTip(); }
+      hit.addEventListener("pointerenter", on);
+      hit.addEventListener("pointerleave", off);
+      hit.addEventListener("focus", on);
+      hit.addEventListener("blur", off);
+
+      // selective direct labels: peak + latest complete-ish value (skip collisions/zero)
+      var isLabel = (i === maxIdx && v > 0) || (i === latestIdx && i !== maxIdx && v > 0 && n > 2);
+      if (isLabel && h > 0) {
+        el("text", { x: x + barW / 2, y: Y(v) - 5, "text-anchor": "middle", "font-size": 10.5, "font-weight": 600, fill: "var(--text-secondary)" }, svg)
+          .textContent = fmtN(v);
+      }
+    });
+
+    // event reference line (e.g. center opening), placed at its exact date
+    for (var i = 0; i < n; i++) {
+      var b = s.buckets[i];
+      if (b.start && EVENT.date >= b.start && EVENT.date < b.endEx) {
+        var frac = (s2d(EVENT.date) - s2d(b.start)) / (s2d(b.endEx) - s2d(b.start));
+        var ex = mL + band * (i + frac);
+        el("line", {
+          x1: ex, x2: ex, y1: 14, y2: Y(0),
+          stroke: "var(--text-muted)", "stroke-width": 1, "stroke-dasharray": "3 3",
+          "pointer-events": "none"
+        }, svg);
+        var onLeft = ex > W * 0.6;
+        el("text", {
+          x: ex + (onLeft ? -5 : 5), y: 12, "text-anchor": onLeft ? "end" : "start",
+          "font-size": 10, fill: "var(--text-muted)", "pointer-events": "none"
+        }, svg).textContent = EVENT.label;
+        svg.setAttribute("aria-label", svg.getAttribute("aria-label") + " A dashed reference line marks " + EVENT.label + ", 2026.");
+        break;
+      }
+    }
+    container.appendChild(svg);
+  }
+
+  /* ---------- cards ---------- */
+  function buildCards() {
+    var grid = document.getElementById("grid");
+    grid.replaceChildren();
+    CHARTS.forEach(function (cfg) {
+      var card = document.createElement("section");
+      card.className = "card"; card.id = "card-" + cfg.id;
+
+      var h = document.createElement("h2");
+      h.textContent = cfg.title;
+      var badge = document.createElement("span");
+      badge.className = "badge"; badge.textContent = cfg.geo;
+      h.appendChild(badge);
+      card.appendChild(h);
+
+      var sub = document.createElement("p");
+      sub.className = "sub"; sub.textContent = cfg.sub;
+      card.appendChild(sub);
+
+      var body = document.createElement("div"); body.className = "chart-body";
+      card.appendChild(body);
+
+      var foot = document.createElement("div"); foot.className = "foot";
+      var thru = document.createElement("span"); thru.className = "thru";
+      var btn = document.createElement("button");
+      btn.type = "button"; btn.className = "tbl-btn"; btn.textContent = "View as table";
+      foot.appendChild(thru); foot.appendChild(btn);
+      card.appendChild(foot);
+
+      var tblWrap = document.createElement("div"); tblWrap.hidden = true;
+      card.appendChild(tblWrap);
+      btn.addEventListener("click", function () {
+        tblWrap.hidden = !tblWrap.hidden;
+        btn.textContent = tblWrap.hidden ? "View as table" : "Hide table";
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    CHARTS.forEach(function (cfg) {
+      var card = document.getElementById("card-" + cfg.id);
+      var body = card.querySelector(".chart-body");
+      var thru = card.querySelector(".thru");
+      var tblWrap = card.querySelector("div[hidden], .foot + div");
+      tblWrap = card.lastElementChild;
+      body.replaceChildren();
+      tblWrap.replaceChildren();
+
+      if (state.errors[cfg.src]) {
+        var err = document.createElement("div");
+        err.className = "status error";
+        err.textContent = "Couldn’t load this data (" + state.errors[cfg.src] + "). Check your connection and reload.";
+        body.appendChild(err);
+        thru.textContent = "";
+        return;
+      }
+      var s = seriesFor(cfg, state.gran);
+      if (!s || !s.values.length) {
+        var st = document.createElement("div");
+        st.className = "status"; st.textContent = "No data available yet.";
+        body.appendChild(st);
+        thru.textContent = "";
+        return;
+      }
+      renderChart(body, cfg, s);
+      var thruTxt = "Data through " + fmtDay(s.through) + ", " + s.through.slice(0, 4);
+      if (s.monthlyOnly && state.gran === "weekly") thruTxt = "Monthly only · " + thruTxt;
+      if (s.note) thruTxt += " · " + s.note;
+      thru.textContent = thruTxt;
+
+      // table view
+      var tbl = document.createElement("table");
+      var cap = document.createElement("caption");
+      cap.textContent = cfg.title + " — " + (s.monthlyOnly ? "monthly" : state.gran) + " counts";
+      tbl.appendChild(cap);
+      var thead = document.createElement("thead"), trh = document.createElement("tr");
+      ["Period", "Count"].forEach(function (t, i) {
+        var th = document.createElement("th"); th.textContent = t;
+        if (i === 1) th.className = "num";
+        th.scope = "col"; trh.appendChild(th);
+      });
+      thead.appendChild(trh); tbl.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      s.buckets.forEach(function (b, i) {
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td");
+        td1.textContent = b.label + (b.partial ? " (partial)" : "");
+        var td2 = document.createElement("td");
+        td2.className = "num"; td2.textContent = fmtN(s.values[i]);
+        tr.appendChild(td1); tr.appendChild(td2); tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      tblWrap.appendChild(tbl);
+    });
+    renderTiles();
+    var notes = [];
+    if (state.through.police) notes.push("SFPD data through " + fmtDay(state.through.police));
+    if (state.through.t311) notes.push("311 through " + fmtDay(state.through.t311));
+    document.getElementById("rangeNote").textContent = notes.length ? notes.join(" · ") : "";
+  }
+
+  /* ---------- stat tiles ---------- */
+  function ytdOfDaily(key) {
+    var sum = 0;
+    if (!state.daily[key]) return null;
+    state.daily[key].forEach(function (n, day) { if (day >= START) sum += n; });
+    return sum;
+  }
+  function monthlyDelta(key) {
+    // latest complete month vs the one before, from daily data
+    var through = state.through[key === "homeless" ? "t311" : "police"];
+    if (!through || !state.daily[key]) return null;
+    var m = monthStart(today());
+    var last = null, prev = null, lastM = null;
+    // walk back to find the two most recent complete months covered by data
+    var cur = monthStart(START), months = [];
+    while (cur < m) { months.push(cur); cur = nextMonth(cur); }
+    months = months.filter(function (mm) { return addDays(nextMonth(mm), -1) <= through; });
+    if (months.length < 2) return null;
+    function sumMonth(mm) {
+      var s = 0, end = nextMonth(mm);
+      state.daily[key].forEach(function (n, day) { if (day >= mm && day < end) s += n; });
+      return s;
+    }
+    lastM = months[months.length - 1];
+    last = sumMonth(lastM); prev = sumMonth(months[months.length - 2]);
+    return { last: last, prev: prev, label: MONTHS[+lastM.slice(5, 7) - 1] };
+  }
+
+  function renderTiles() {
+    var tiles = document.getElementById("tiles");
+    tiles.replaceChildren();
+    var defs = [
+      { label: "Drug offenses · SoMa YTD", color: "var(--s-soma)", value: ytdOfDaily("drugs"), delta: monthlyDelta("drugs"), err: state.errors.police },
+      { label: "Homelessness-related 311 · SoMa YTD", color: "var(--s-soma)", value: ytdOfDaily("homeless"), delta: monthlyDelta("homeless"), err: state.errors.t311 },
+      { label: "Overdose 911 responses · SF YTD", color: "var(--s-city)",
+        value: state.ems.length ? state.ems.filter(function (r) { return r.week >= START; }).reduce(function (a, r) { return a + r.n; }, 0) : null,
+        note: state.through.ems ? "through " + fmtDay(state.through.ems) : null, err: state.errors.ems },
+      { label: "Overdose deaths · SF YTD", color: "var(--s-city)",
+        value: state.deaths.length ? state.deaths.reduce(function (a, r) { return a + r.n; }, 0) : null,
+        note: state.through.deaths ? "preliminary · through " + fmtMonth(state.through.deaths).replace(" 2026", "") : null, err: state.errors.deaths }
+    ];
+    defs.forEach(function (d) {
+      var t = document.createElement("div"); t.className = "tile";
+      var lab = document.createElement("div"); lab.className = "t-label";
+      var dot = document.createElement("span"); dot.className = "t-dot"; dot.style.background = d.color;
+      lab.appendChild(dot); lab.appendChild(document.createTextNode(d.label));
+      var val = document.createElement("div"); val.className = "t-value";
+      val.textContent = d.err ? "—" : (d.value === null ? "…" : fmtN(d.value));
+      var sub = document.createElement("div"); sub.className = "t-delta";
+      if (d.delta && d.delta.prev > 0) {
+        var pct = Math.round((d.delta.last - d.delta.prev) / d.delta.prev * 100);
+        var span = document.createElement("span");
+        span.className = pct >= 0 ? "up" : "down";
+        span.textContent = (pct >= 0 ? "▲ +" : "▼ ") + pct + "%";
+        sub.appendChild(span);
+        sub.appendChild(document.createTextNode(" in " + d.delta.label + " vs prior month"));
+      } else if (d.note) {
+        sub.textContent = d.note;
+      }
+      t.appendChild(lab); t.appendChild(val); t.appendChild(sub);
+      tiles.appendChild(t);
+    });
+  }
+
+  /* ---------- controls ---------- */
+  var btnW = document.getElementById("btnWeekly"), btnM = document.getElementById("btnMonthly");
+  function setGran(g) {
+    state.gran = g;
+    btnW.setAttribute("aria-pressed", String(g === "weekly"));
+    btnM.setAttribute("aria-pressed", String(g === "monthly"));
+    renderAll();
+  }
+  btnW.addEventListener("click", function () { setGran("weekly"); });
+  btnM.addEventListener("click", function () { setGran("monthly"); });
+
+  var themeBtn = document.getElementById("themeBtn");
+  var themes = ["auto", "light", "dark"];
+  function applyTheme(t) {
+    if (t === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+    themeBtn.textContent = "Theme: " + t.charAt(0).toUpperCase() + t.slice(1);
+    try { localStorage.setItem("soma-theme", t); } catch (e) {}
+  }
+  var savedTheme = "auto";
+  try { savedTheme = localStorage.getItem("soma-theme") || "auto"; } catch (e) {}
+  applyTheme(savedTheme);
+  themeBtn.addEventListener("click", function () {
+    var cur = themes.indexOf(themeBtn.textContent.split(": ")[1].toLowerCase());
+    applyTheme(themes[(cur + 1) % 3]);
+  });
+
+  /* ---------- boot ---------- */
+  buildCards();
+  CHARTS.forEach(function (cfg) {
+    var card = document.getElementById("card-" + cfg.id);
+    var st = document.createElement("div");
+    st.className = "status"; st.textContent = "Loading…";
+    card.querySelector(".chart-body").appendChild(st);
+  });
+
+  Promise.allSettled([
+    loadPolice().catch(function (e) { state.errors.police = e.message; }),
+    loadThreeOneOne().catch(function (e) { state.errors.t311 = e.message; }),
+    loadEms().catch(function (e) { state.errors.ems = e.message; }),
+    loadDeaths().catch(function (e) { state.errors.deaths = e.message; })
+  ]).then(renderAll);
+})();
+</script>
+</body>
+</html>
