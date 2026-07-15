@@ -190,8 +190,6 @@
       <dd>SFPD incidents in the &ldquo;Suspicious Occ&rdquo; category &mdash; reports of suspicious persons, vehicles, packages, or activity that an officer documented in a filed report. Far smaller than call volume, because most calls never result in a report.</dd>
       <dt>&ldquo;Suspicious person&rdquo; 911 calls</dt>
       <dd>Law-enforcement dispatched calls for service whose final call type is &ldquo;Suspicious Person&rdquo; &mdash; a measure of community reporting rather than police documentation. Excludes calls explicitly cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
-      <dt>Street disorder incidents</dt>
-      <dd>SFPD incidents in the &ldquo;Disorderly Conduct&rdquo; category <em>excluding</em> the drug violations counted above (leaving intimidation, drunkenness, loitering, and disturbing the peace), plus the &ldquo;Civil Sidewalks&rdquo; category (sit/lie ordinance enforcement).</dd>
       <dt>Homelessness-related 311 requests</dt>
       <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing.</dd>
       <dt>Overdose-related 911 responses</dt>
@@ -306,23 +304,21 @@
   function loadPolice() {
     // drugs = every incident whose SUBcategory is "Drug Violation", regardless of
     // parent category (they occur under Drug Offense, Drug Violation, and
-    // Disorderly Conduct). disorder = remaining Disorderly Conduct + Civil Sidewalks.
+    // Disorderly Conduct). susp = the Suspicious Occ/Suspicious categories.
     return soql("wg3w-h783", {
-      "$select": "incident_date, incident_category, incident_subcategory, count(*) as n",
+      "$select": "incident_date, incident_subcategory, count(*) as n",
       "$where": "incident_date>='" + START + "' AND analysis_neighborhood='South of Market' AND (" +
         "incident_subcategory='Drug Violation'" +
-        " OR incident_category in('Suspicious Occ','Suspicious','Disorderly Conduct','Civil Sidewalks'))",
-      "$group": "incident_date, incident_category, incident_subcategory",
+        " OR incident_category in('Suspicious Occ','Suspicious'))",
+      "$group": "incident_date, incident_subcategory",
       "$limit": "20000"
     }).then(function (rows) {
-      ["drugs", "susp", "disorder"].forEach(function (k) { state.daily[k] = new Map(); });
+      ["drugs", "susp"].forEach(function (k) { state.daily[k] = new Map(); });
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.incident_date).slice(0, 10);
         if (!maxDay || day > maxDay) maxDay = day;
-        var k = r.incident_subcategory === "Drug Violation" ? "drugs"
-              : (r.incident_category === "Suspicious Occ" || r.incident_category === "Suspicious") ? "susp"
-              : "disorder";
+        var k = r.incident_subcategory === "Drug Violation" ? "drugs" : "susp";
         var m = state.daily[k];
         m.set(day, (m.get(day) || 0) + (+r.n));
       });
@@ -407,8 +403,6 @@
       title: "“Suspicious occurrence” incidents", sub: "SFPD incident reports · “Suspicious Occ” category", src: "police" },
     { id: "suspcalls", kind: "daily", key: "suspCalls", color: "var(--s-soma)", geo: "SoMa",
       title: "“Suspicious person” 911 calls", sub: "Dispatched calls for service · excludes calls cancelled by dispatch (CAN/22/DUP)", src: "calls" },
-    { id: "disorder", kind: "daily", key: "disorder", color: "var(--s-soma)", geo: "SoMa",
-      title: "Street disorder incidents", sub: "SFPD incident reports · Disorderly Conduct (excl. drug violations) + Civil Sidewalks", src: "police" },
     { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
       title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
