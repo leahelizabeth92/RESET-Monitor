@@ -187,7 +187,9 @@
       <dt>Drug offenses</dt>
       <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all so every drug violation is counted here exactly once.</dd>
       <dt>&ldquo;Suspicious occurrence&rdquo; incidents</dt>
-      <dd>SFPD incidents in the &ldquo;Suspicious Occ&rdquo; category &mdash; reports of suspicious persons, vehicles, packages, or activity that an officer documented.</dd>
+      <dd>SFPD incidents in the &ldquo;Suspicious Occ&rdquo; category &mdash; reports of suspicious persons, vehicles, packages, or activity that an officer documented in a filed report. Far smaller than call volume, because most calls never result in a report.</dd>
+      <dt>&ldquo;Suspicious person&rdquo; 911 calls</dt>
+      <dd>Law-enforcement dispatched calls for service whose final call type is &ldquo;Suspicious Person&rdquo; &mdash; a measure of community reporting rather than police documentation. Excludes calls explicitly cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
       <dt>Street disorder incidents</dt>
       <dd>SFPD incidents in the &ldquo;Disorderly Conduct&rdquo; category <em>excluding</em> the drug violations counted above (leaving intimidation, drunkenness, loitering, and disturbing the peace), plus the &ldquo;Civil Sidewalks&rdquo; category (sit/lie ordinance enforcement).</dd>
       <dt>Homelessness-related 311 requests</dt>
@@ -203,6 +205,7 @@
   <footer class="page">
     <p><strong>Sources (SF Open Data portal):</strong>
       <a href="https://data.sfgov.org/d/wg3w-h783" target="_blank" rel="noopener">Police Incident Reports</a> &middot;
+      <a href="https://data.sfgov.org/d/2zdj-bwza" target="_blank" rel="noopener">Dispatched Calls for Service</a> &middot;
       <a href="https://data.sfgov.org/d/vw6y-z8j6" target="_blank" rel="noopener">311 Cases</a> &middot;
       <a href="https://data.sfgov.org/d/ed3a-sn39" target="_blank" rel="noopener">Overdose-Related 911 Responses (EMS)</a> &middot;
       <a href="https://data.sfgov.org/d/jxrr-bmra" target="_blank" rel="noopener">Preliminary Unintentional Drug Overdose Deaths</a>
@@ -346,6 +349,28 @@
     });
   }
 
+  function loadCalls() {
+    // 911 dispatched calls, final call type SUSPICIOUS PERSON, excluding calls
+    // explicitly cancelled by dispatch (CAN), no-merit (22), or duplicates (DUP)
+    return soql("2zdj-bwza", {
+      "$select": "date_trunc_ymd(received_datetime) as d, count(*) as n",
+      "$where": "received_datetime>='" + START + "' AND analysis_neighborhood='South of Market'" +
+        " AND call_type_final_desc='SUSPICIOUS PERSON'" +
+        " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
+      "$group": "d",
+      "$limit": "20000"
+    }).then(function (rows) {
+      state.daily.suspCalls = new Map();
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        state.daily.suspCalls.set(day, (state.daily.suspCalls.get(day) || 0) + (+r.n));
+      });
+      state.through.calls = maxDay;
+    });
+  }
+
   function loadEms() {
     return soql("ed3a-sn39", {
       "$select": "week_start_date, total_overdose_related_911_calls",
@@ -380,6 +405,8 @@
       title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
     { id: "susp",     kind: "daily", key: "susp",     color: "var(--s-soma)", geo: "SoMa",
       title: "“Suspicious occurrence” incidents", sub: "SFPD incident reports · “Suspicious Occ” category", src: "police" },
+    { id: "suspcalls", kind: "daily", key: "suspCalls", color: "var(--s-soma)", geo: "SoMa",
+      title: "“Suspicious person” 911 calls", sub: "Dispatched calls for service · excludes calls cancelled by dispatch (CAN/22/DUP)", src: "calls" },
     { id: "disorder", kind: "daily", key: "disorder", color: "var(--s-soma)", geo: "SoMa",
       title: "Street disorder incidents", sub: "SFPD incident reports · Disorderly Conduct (excl. drug violations) + Civil Sidewalks", src: "police" },
     { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
@@ -796,6 +823,7 @@
 
   Promise.allSettled([
     loadPolice().catch(function (e) { state.errors.police = e.message; }),
+    loadCalls().catch(function (e) { state.errors.calls = e.message; }),
     loadThreeOneOne().catch(function (e) { state.errors.t311 = e.message; }),
     loadEms().catch(function (e) { state.errors.ems = e.message; }),
     loadDeaths().catch(function (e) { state.errors.deaths = e.message; })
