@@ -147,6 +147,10 @@
   .card td.num, .card th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .card .status { font-size: 12.5px; color: var(--text-muted); padding: 34px 0; text-align: center; }
   .card .status.error { color: var(--delta-bad); }
+  .card.wide { grid-column: 1 / -1; }
+  .dispo-wrap { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 4px; }
+  .dispo-wrap > div { flex: 1 1 340px; min-width: 0; overflow-x: auto; }
+  .dispo-wrap h3 { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); margin: 0 0 4px; }
 
   .tooltip {
     position: absolute; pointer-events: none; z-index: 10; display: none;
@@ -232,6 +236,8 @@
       <dd>SFPD incident reports, stacked in three groups: <em>larceny theft</em> (the &ldquo;Larceny Theft&rdquo; category &mdash; thefts without force or breaking in, including from vehicles and shoplifting), <em>violent crime</em> (the FBI definition: homicide, rape, robbery, and aggravated assault &mdash; simple assault is not included), and <em>burglary</em> (the &ldquo;Burglary&rdquo; category &mdash; unlawful entry of a building). Motor vehicle theft is not included in any group.</dd>
       <dt>Homelessness-related 311 requests</dt>
       <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing. No prior-year line on this chart: the city only began routing cases this way in mid-2025, so a year-over-year comparison would reflect the process change, not conditions on the street.</dd>
+      <dt>How officer-initiated &ldquo;suspicious person&rdquo; stops end</dt>
+      <dd>Outcome (disposition) of each officer-initiated stop, from the same dispatched-calls data as the first chart: <em>handled/advised</em> (resolved on scene or a warning &mdash; no paperwork, codes HAN/ADV), <em>arrest</em> (ARR), <em>citation</em> (CIT), <em>report</em> (an incident report was written, REP), and <em>other</em> (no disposition recorded, no merit, unable to locate, etc.). Percentages are each neighborhood&rsquo;s share of stops in the period; &ldquo;Stops/mo&rdquo; is the monthly average. Public 911 calls are not included in this table.</dd>
       <dt>Overdose-related 911 responses</dt>
       <dd>Opioid overdose-related 911 calls responded to by ambulances, per SF Emergency Medical Services patient-care records. Citywide only.</dd>
       <dt>Drug overdose deaths (preliminary)</dt>
@@ -469,6 +475,40 @@
     });
   }
 
+  function loadDispo() {
+    // outcome mix of officer-initiated suspicious-person stops in all three
+    // neighborhoods, split at the RESET Center opening date
+    var base = "analysis_neighborhood in('South of Market','Tenderloin','Mission')" +
+      " AND call_type_final_desc='SUSPICIOUS PERSON' AND onview_flag!='N'" +
+      " AND (disposition not in('CAN','22','DUP') OR disposition is null)";
+    function q(where) {
+      return soql("2zdj-bwza", {
+        "$select": "analysis_neighborhood as h, disposition as d, count(*) as n",
+        "$where": where, "$group": "h, d", "$limit": "500"
+      });
+    }
+    function shape(rows) {
+      var out = {};
+      rows.forEach(function (r) {
+        var b = (r.d === "HAN" || r.d === "ADV") ? "handled" : r.d === "ARR" ? "arrest"
+              : r.d === "CIT" ? "citation" : r.d === "REP" ? "report" : "other";
+        out[r.h] = out[r.h] || {};
+        out[r.h][b] = (out[r.h][b] || 0) + (+r.n);
+      });
+      return out;
+    }
+    return Promise.all([
+      q("received_datetime>='" + START + "' AND received_datetime<'" + EVENT.date + "' AND " + base),
+      q("received_datetime>='" + EVENT.date + "' AND " + base),
+      soql("2zdj-bwza", { "$select": "max(received_datetime) as mx", "$where": base })
+    ]).then(function (res) {
+      state.dispo = {
+        before: shape(res[0]), after: shape(res[1]),
+        through: String(res[2][0].mx).slice(0, 10)
+      };
+    });
+  }
+
   function loadEms() {
     return soql("ed3a-sn39", {
       "$select": "week_start_date, total_overdose_related_911_calls",
@@ -532,6 +572,9 @@
         { key: "violent",  name: "Violent crime", color: "var(--s-soma2)" },
         { key: "burglary", name: "Burglary",      color: "var(--s-soma3)" }
       ] },
+    { id: "dispo",    kind: "dispo", geo: "SoMa · Tenderloin · Mission",
+      title: "How officer-initiated “suspicious person” stops end",
+      sub: "Share of stop outcomes by neighborhood, before vs. since the RESET Center opening", src: "dispo" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
       title: "Overdose-related 911 responses", sub: "EMS responses · published citywide only, ~3-month lag", src: "ems" },
     { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
@@ -916,13 +959,74 @@
     container.appendChild(svg);
   }
 
+  /* ---------- disposition comparison card ---------- */
+  function renderDispoCard(card, body, thru) {
+    if (state.errors.dispo) {
+      var err = document.createElement("div");
+      err.className = "status error";
+      err.textContent = "Couldn’t load this data (" + state.errors.dispo + "). Check your connection and reload.";
+      body.appendChild(err); thru.textContent = "";
+      return;
+    }
+    if (!state.dispo) {
+      var st = document.createElement("div");
+      st.className = "status"; st.textContent = "Loading…";
+      body.appendChild(st); thru.textContent = "";
+      return;
+    }
+    var MS_DAY = 86400000;
+    var periods = [
+      { key: "before", label: "Before RESET Center opening · Jan 1 – May 3",
+        months: (s2d(EVENT.date) - s2d(START)) / MS_DAY / 30.437 },
+      { key: "after", label: "Since RESET Center opening · May 4 – " + fmtDay(state.dispo.through),
+        months: (s2d(addDays(state.dispo.through, 1)) - s2d(EVENT.date)) / MS_DAY / 30.437 }
+    ];
+    var COLS = [["handled", "Handled / advised"], ["arrest", "Arrest"], ["citation", "Citation"], ["report", "Report"], ["other", "Other"]];
+    var wrap = document.createElement("div"); wrap.className = "dispo-wrap";
+    periods.forEach(function (p) {
+      var box = document.createElement("div");
+      var h3 = document.createElement("h3"); h3.textContent = p.label;
+      box.appendChild(h3);
+      var tbl = document.createElement("table");
+      var thead = document.createElement("thead"), trh = document.createElement("tr");
+      ["", "Stops/mo"].concat(COLS.map(function (c) { return c[1]; })).forEach(function (t, i) {
+        var th = document.createElement("th"); th.textContent = t;
+        if (i > 0) th.className = "num";
+        th.scope = "col"; trh.appendChild(th);
+      });
+      thead.appendChild(trh); tbl.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      HOODS.forEach(function (hood) {
+        var data = state.dispo[p.key][hood.name] || {};
+        var total = COLS.reduce(function (a, c) { return a + (data[c[0]] || 0); }, 0);
+        var tr = document.createElement("tr");
+        var td0 = document.createElement("td"); td0.textContent = hood.short; tr.appendChild(td0);
+        var tdm = document.createElement("td"); tdm.className = "num";
+        tdm.textContent = total ? fmtN(Math.round(total / p.months)) : "—";
+        tr.appendChild(tdm);
+        COLS.forEach(function (c) {
+          var td = document.createElement("td"); td.className = "num";
+          td.textContent = total ? Math.round((data[c[0]] || 0) * 100 / total) + "%" : "—";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      box.appendChild(tbl);
+      wrap.appendChild(box);
+    });
+    body.appendChild(wrap);
+    thru.textContent = "Officer-initiated (on-view) stops only · excludes cancelled/duplicates · data through " +
+      fmtDay(state.dispo.through) + ", " + state.dispo.through.slice(0, 4);
+  }
+
   /* ---------- cards ---------- */
   function buildCards() {
     var grid = document.getElementById("grid");
     grid.replaceChildren();
     CHARTS.forEach(function (cfg) {
       var card = document.createElement("section");
-      card.className = "card"; card.id = "card-" + cfg.id;
+      card.className = "card" + (cfg.kind === "dispo" ? " wide" : ""); card.id = "card-" + cfg.id;
 
       var h = document.createElement("h2");
       h.textContent = cfg.title;
@@ -942,6 +1046,7 @@
       var thru = document.createElement("span"); thru.className = "thru";
       var btn = document.createElement("button");
       btn.type = "button"; btn.className = "tbl-btn"; btn.textContent = "View as table";
+      if (cfg.kind === "dispo") btn.hidden = true;
       foot.appendChild(thru); foot.appendChild(btn);
       card.appendChild(foot);
 
@@ -966,7 +1071,12 @@
       body.replaceChildren();
       tblWrap.replaceChildren();
 
-      card.querySelector(".geo-badge").textContent = cfg.geo === "Citywide" ? "Citywide" : curShort();
+      card.querySelector(".geo-badge").textContent =
+        (cfg.kind === "dispo" || cfg.geo === "Citywide") ? cfg.geo : curShort();
+      if (cfg.kind === "dispo") {
+        renderDispoCard(card, body, thru);
+        return;
+      }
       var srcErr = (cfg.src === "ems" || cfg.src === "deaths") ? state.errors[cfg.src] : cur().errors[cfg.src];
       if (srcErr) {
         var err = document.createElement("div");
@@ -1227,7 +1337,8 @@
   Promise.allSettled([
     loadHood(savedHood),
     loadEms().catch(function (e) { state.errors.ems = e.message; }),
-    loadDeaths().catch(function (e) { state.errors.deaths = e.message; })
+    loadDeaths().catch(function (e) { state.errors.deaths = e.message; }),
+    loadDispo().catch(function (e) { state.errors.dispo = e.message; })
   ]).then(function () {
     renderAll();
     // prefetch the other neighborhoods so the comparison dots (and instant
