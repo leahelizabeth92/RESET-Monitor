@@ -140,6 +140,16 @@
   .hit:focus { outline: none; }
   .hit:focus-visible + .bar, .hit:focus + .bar { filter: brightness(1.15); }
 
+  .defs {
+    margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--grid);
+    font-size: 12.5px; color: var(--text-secondary); max-width: 860px;
+  }
+  .defs h2 { font-size: 14.5px; font-weight: 650; color: var(--text-primary); margin: 0 0 8px; }
+  .defs dt { font-weight: 600; color: var(--text-primary); margin-top: 10px; }
+  .defs dd { margin: 2px 0 0; line-height: 1.5; }
+  .defs a { color: var(--text-secondary); }
+  .defs p { margin: 12px 0 0; color: var(--text-muted); font-size: 12px; }
+
   footer.page {
     margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--grid);
     font-size: 12px; color: var(--text-muted);
@@ -170,6 +180,25 @@
 
   <div class="tiles" id="tiles"></div>
   <div class="grid" id="grid"></div>
+
+  <section class="defs">
+    <h2>What each chart counts</h2>
+    <dl>
+      <dt>Drug offenses</dt>
+      <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all so every drug violation is counted here exactly once.</dd>
+      <dt>&ldquo;Suspicious occurrence&rdquo; incidents</dt>
+      <dd>SFPD incidents in the &ldquo;Suspicious Occ&rdquo; category &mdash; reports of suspicious persons, vehicles, packages, or activity that an officer documented.</dd>
+      <dt>Street disorder incidents</dt>
+      <dd>SFPD incidents in the &ldquo;Disorderly Conduct&rdquo; category <em>excluding</em> the drug violations counted above (leaving intimidation, drunkenness, loitering, and disturbing the peace), plus the &ldquo;Civil Sidewalks&rdquo; category (sit/lie ordinance enforcement).</dd>
+      <dt>Homelessness-related 311 requests</dt>
+      <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing.</dd>
+      <dt>Overdose-related 911 responses</dt>
+      <dd>Opioid overdose-related 911 calls responded to by ambulances, per SF Emergency Medical Services patient-care records. Citywide only.</dd>
+      <dt>Drug overdose deaths (preliminary)</dt>
+      <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
+    </dl>
+    <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
+  </section>
 
   <footer class="page">
     <p><strong>Sources (SF Open Data portal):</strong>
@@ -271,19 +300,16 @@
     errors: {}
   };
 
-  var POLICE_GROUPS = {
-    drugs:    ["Drug Offense", "Drug Violation"],
-    susp:     ["Suspicious Occ", "Suspicious"],
-    disorder: ["Disorderly Conduct", "Civil Sidewalks"]
-  };
-
   function loadPolice() {
-    var cats = [].concat(POLICE_GROUPS.drugs, POLICE_GROUPS.susp, POLICE_GROUPS.disorder);
+    // drugs = every incident whose SUBcategory is "Drug Violation", regardless of
+    // parent category (they occur under Drug Offense, Drug Violation, and
+    // Disorderly Conduct). disorder = remaining Disorderly Conduct + Civil Sidewalks.
     return soql("wg3w-h783", {
-      "$select": "incident_date, incident_category, count(*) as n",
-      "$where": "incident_date>='" + START + "' AND analysis_neighborhood='South of Market' AND incident_category in(" +
-        cats.map(function (c) { return "'" + c + "'"; }).join(",") + ")",
-      "$group": "incident_date, incident_category",
+      "$select": "incident_date, incident_category, incident_subcategory, count(*) as n",
+      "$where": "incident_date>='" + START + "' AND analysis_neighborhood='South of Market' AND (" +
+        "incident_subcategory='Drug Violation'" +
+        " OR incident_category in('Suspicious Occ','Suspicious','Disorderly Conduct','Civil Sidewalks'))",
+      "$group": "incident_date, incident_category, incident_subcategory",
       "$limit": "20000"
     }).then(function (rows) {
       ["drugs", "susp", "disorder"].forEach(function (k) { state.daily[k] = new Map(); });
@@ -291,12 +317,11 @@
       rows.forEach(function (r) {
         var day = String(r.incident_date).slice(0, 10);
         if (!maxDay || day > maxDay) maxDay = day;
-        Object.keys(POLICE_GROUPS).forEach(function (k) {
-          if (POLICE_GROUPS[k].indexOf(r.incident_category) >= 0) {
-            var m = state.daily[k];
-            m.set(day, (m.get(day) || 0) + (+r.n));
-          }
-        });
+        var k = r.incident_subcategory === "Drug Violation" ? "drugs"
+              : (r.incident_category === "Suspicious Occ" || r.incident_category === "Suspicious") ? "susp"
+              : "disorder";
+        var m = state.daily[k];
+        m.set(day, (m.get(day) || 0) + (+r.n));
       });
       state.through.police = maxDay;
     });
@@ -352,11 +377,11 @@
   /* ---------- chart config ---------- */
   var CHARTS = [
     { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa",
-      title: "Drug offenses", sub: "SFPD incident reports · “Drug Offense” + “Drug Violation” categories", src: "police" },
+      title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
     { id: "susp",     kind: "daily", key: "susp",     color: "var(--s-soma)", geo: "SoMa",
       title: "“Suspicious occurrence” incidents", sub: "SFPD incident reports · “Suspicious Occ” category", src: "police" },
     { id: "disorder", kind: "daily", key: "disorder", color: "var(--s-soma)", geo: "SoMa",
-      title: "Street disorder incidents", sub: "SFPD incident reports · Disorderly Conduct + Civil Sidewalks (sit/lie)", src: "police" },
+      title: "Street disorder incidents", sub: "SFPD incident reports · Disorderly Conduct (excl. drug violations) + Civil Sidewalks", src: "police" },
     { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
       title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
