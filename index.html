@@ -219,6 +219,7 @@
       <button type="button" id="btnMonthly" aria-pressed="false">Monthly</button>
     </div>
     <label class="cmp-toggle"><input type="checkbox" id="cmpToggle" checked> Compare neighborhoods</label>
+    <label class="cmp-toggle"><input type="checkbox" id="cityToggle"> Show as % of citywide</label>
     <span class="range-note" id="rangeNote">Loading data&hellip;</span>
   </div>
 
@@ -252,6 +253,7 @@
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
+    <p>&ldquo;Show as % of citywide&rdquo; re-draws each neighborhood chart as that neighborhood&rsquo;s share of the citywide total for the same period (e.g., SoMa&rsquo;s drug offenses as a percentage of all SF drug offenses) &mdash; a scale-free way to see whether activity is concentrating in or leaving a neighborhood. In this mode the prior-year line and comparison dots become shares too, and stacked charts show the neighborhood&rsquo;s total share. The two citywide overdose charts are unaffected.</p>
     <p>The circle and diamond dots on each neighborhood chart show the other two neighborhoods&rsquo; totals for the same period, for side-by-side comparison (also listed in each chart&rsquo;s tooltip and table). The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
     <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
   </section>
@@ -359,6 +361,8 @@
   var state = {
     gran: "weekly",
     compare: true,
+    pctMode: false,  // show charts as % of citywide instead of counts
+    city: null,      // citywide daily series (2025+2026) for % mode
     hood: "South of Market",
     hoods: {},       // neighborhood -> {daily, prior, through, errors, loaded}
     prior: {},       // citywide prior-year data (EMS weeks, death months)
@@ -484,6 +488,62 @@
     });
   }
 
+  function loadCity() {
+    // citywide daily totals (2025 + 2026) per metric, for the %-of-citywide mode
+    var daily = { drugs: new Map(), crime: new Map(), suspCalls: new Map(), homeless: new Map() };
+    var through = {};
+    function add(map, day, n) { map.set(day, (map.get(day) || 0) + n); }
+    var pPolice = soql("wg3w-h783", {
+      "$select": "incident_date, incident_category, incident_subcategory, count(*) as n",
+      "$where": "incident_date>='" + PRIOR_START + "' AND (" +
+        "incident_subcategory='Drug Violation'" +
+        " OR incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
+        " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
+      "$group": "incident_date, incident_category, incident_subcategory",
+      "$limit": "50000"
+    }).then(function (rows) {
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.incident_date).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        add(r.incident_subcategory === "Drug Violation" ? daily.drugs : daily.crime, day, +r.n);
+      });
+      through.police = maxDay;
+    });
+    var pCalls = soql("2zdj-bwza", {
+      "$select": "date_trunc_ymd(received_datetime) as d, count(*) as n",
+      "$where": "received_datetime>='" + PRIOR_START + "'" +
+        " AND call_type_final_desc='SUSPICIOUS PERSON'" +
+        " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
+      "$group": "d", "$limit": "20000"
+    }).then(function (rows) {
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        add(daily.suspCalls, day, +r.n);
+      });
+      through.calls = maxDay;
+    });
+    var p311 = soql("vw6y-z8j6", {
+      "$select": "date_trunc_ymd(requested_datetime) as d, count(*) as n",
+      "$where": "requested_datetime>='" + START + "'" +
+        " AND service_name='General Request' AND service_subtype='homelessness_and_supportive_housing'",
+      "$group": "d", "$limit": "20000"
+    }).then(function (rows) {
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        add(daily.homeless, day, +r.n);
+      });
+      through.t311 = maxDay;
+    });
+    return Promise.all([pPolice, pCalls, p311]).then(function () {
+      state.city = { daily: daily, through: through };
+    });
+  }
+
   function loadDispo() {
     // outcome mix of officer-initiated suspicious-person stops in all three
     // neighborhoods, split at the RESET Center opening date
@@ -559,7 +619,7 @@
 
   /* ---------- chart config ---------- */
   var CHARTS = [
-    { id: "suspcalls", kind: "stack", geo: "SoMa",
+    { id: "suspcalls", kind: "stack", geo: "SoMa", cityKey: "suspCalls",
       priorKey: "suspCalls", priorName: "Total · same period 2025",
       priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
       title: "“Suspicious person” calls & stops",
@@ -568,11 +628,11 @@
         { key: "suspCallsPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
         { key: "suspCallsOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
       ] },
-    { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa", priorKey: "drugs",
+    { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa", priorKey: "drugs", cityKey: "drugs",
       title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
-    { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa",
+    { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa", cityKey: "homeless",
       title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
-    { id: "crime",    kind: "stack", geo: "SoMa", src: "police",
+    { id: "crime",    kind: "stack", geo: "SoMa", src: "police", cityKey: "crime",
       priorKey: "crime", priorName: "Total · same period 2025",
       title: "Larceny, violent crime & burglary",
       sub: "SFPD incident reports · violent crime = homicide, rape, robbery, aggravated assault",
@@ -624,8 +684,27 @@
       buckets = buckets.filter(function (b) { return b.start <= through; });
       var pmap = cfg.priorKey && H.prior[cfg.priorKey];
       var prior = pmap ? buckets.map(function (b) { return priorDaily(pmap, b, gran); }) : null;
+      var pct = !!(state.pctMode && cfg.cityKey && state.city && state.city.daily[cfg.cityKey]);
+      var cityCur = null, cityThru = null;
+      if (pct) {
+        cityThru = state.city.through[cfg.src];
+        cityCur = aggregate(state.city.daily[cfg.cityKey], buckets).map(function (c, i) {
+          return (c > 0 && cityThru && buckets[i].start <= cityThru) ? c : null;
+        });
+        if (prior) {
+          var cmap = state.city.daily[cfg.cityKey], priorCounts = prior;
+          prior = buckets.map(function (b, i) {
+            if (priorCounts[i] === null) return null;
+            var cp = priorDaily(cmap, b, gran);
+            return cp > 0 ? Math.round(priorCounts[i] / cp * 1000) / 10 : null;
+          });
+        }
+      }
+      function share(v, c) {
+        return (v === null || c === null || c === undefined) ? null : Math.round(v / c * 1000) / 10;
+      }
       var pmap2 = cfg.priorKey2 && H.prior[cfg.priorKey2];
-      var prior2 = pmap2 ? {
+      var prior2 = (pmap2 && !pct) ? {
         name: cfg.prior2Name, color: cfg.prior2Color,
         values: buckets.map(function (b) { return priorDaily(pmap2, b, gran); })
       } : null;
@@ -647,6 +726,7 @@
           }
           var thru2 = H2.through[cfg.src];
           vals = vals.map(function (v, i) { return (thru2 && buckets[i].start <= thru2) ? v : null; });
+          if (pct) vals = vals.map(function (v, i) { return share(v, cityCur[i]); });
           return {
             name: h.short,
             color: idx === 0 ? "var(--dot-a)" : "var(--dot-b)",
@@ -657,17 +737,29 @@
       if (!others.length) others = null;
       if (cfg.kind === "daily") {
         if (!H.daily[cfg.key]) return null;
-        return { buckets: buckets, values: aggregate(H.daily[cfg.key], buckets), through: through, prior: prior, prior2: prior2, others: others };
+        var dvals = aggregate(H.daily[cfg.key], buckets);
+        if (pct) dvals = dvals.map(function (v, i) { return share(v, cityCur[i]); });
+        return { buckets: buckets, values: dvals, through: through, prior: prior, prior2: prior2, others: others, pct: pct };
       }
       if (cfg.series.some(function (sd) { return !H.daily[sd.key]; })) return null;
       var series = cfg.series.map(function (sd) {
         return { name: sd.name, color: sd.color, values: aggregate(H.daily[sd.key], buckets) };
       });
+      var totals = buckets.map(function (_, i) {
+        return series.reduce(function (a, sr) { return a + sr.values[i]; }, 0);
+      });
+      if (pct) {
+        // in % mode the stack collapses to one bar: this neighborhood's share
+        // of the citywide total
+        return {
+          buckets: buckets, series: null, through: through, prior: prior, prior2: null,
+          others: others, pct: true,
+          values: totals.map(function (v, i) { return share(v, cityCur[i]); })
+        };
+      }
       return {
         buckets: buckets, series: series, through: through, prior: prior, prior2: prior2, others: others,
-        values: buckets.map(function (_, i) {
-          return series.reduce(function (a, sr) { return a + sr.values[i]; }, 0);
-        })
+        values: totals
       };
     }
     if (cfg.kind === "ems") {
@@ -764,7 +856,8 @@
   function showTip(anchorRect, period, value, note, rows) {
     tooltip.replaceChildren();
     var p = document.createElement("div"); p.className = "tt-period"; p.textContent = period;
-    var v = document.createElement("div"); v.className = "tt-value"; v.textContent = fmtN(value);
+    var v = document.createElement("div"); v.className = "tt-value";
+    v.textContent = typeof value === "number" ? fmtN(value) : value;
     tooltip.appendChild(p); tooltip.appendChild(v);
     (rows || []).forEach(function (r) {
       var row = document.createElement("div"); row.className = "tt-row";
@@ -772,7 +865,8 @@
       key.style.background = r.dash
         ? "repeating-linear-gradient(90deg, " + r.color + " 0, " + r.color + " 3px, transparent 3px, transparent 5px)"
         : r.color;
-      var val = document.createElement("strong"); val.textContent = fmtN(r.val);
+      var val = document.createElement("strong");
+      val.textContent = typeof r.val === "number" ? fmtN(r.val) : r.val;
       var name = document.createElement("span"); name.className = "tt-name"; name.textContent = r.name;
       row.appendChild(key); row.appendChild(val); row.appendChild(name);
       tooltip.appendChild(row);
@@ -792,7 +886,11 @@
     var W = 560, H = 232, mL = 40, mR = 10, mT = 20, mB = 26;
     var plotW = W - mL - mR, plotH = H - mT - mB;
     var n = s.values.length;
-    var maxV = Math.max.apply(null, s.values
+    var fmtV = function (v) {
+      return (v === null || v === undefined) ? "—" : (s.pct ? fmtN(v) + "%" : fmtN(v));
+    };
+    var barColor = cfg.color || "var(--s-soma)";
+    var maxV = Math.max.apply(null, s.values.filter(function (v) { return v !== null; })
       .concat(s.prior ? s.prior.filter(function (p) { return p !== null; }) : [])
       .concat(s.prior2 ? s.prior2.values.filter(function (p) { return p !== null; }) : [])
       .concat(s.others ? s.others.reduce(function (a, o) {
@@ -812,7 +910,7 @@
       var y = Y(t);
       if (t > 0) el("line", { x1: mL, x2: W - mR, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }, svg);
       el("text", { x: mL - 6, y: y + 3.5, "text-anchor": "end", "font-size": 10.5, fill: "var(--text-muted)", style: "font-variant-numeric: tabular-nums" }, svg)
-        .textContent = fmtN(t);
+        .textContent = s.pct ? fmtN(t) + "%" : fmtN(t);
     });
     el("line", { x1: mL, x2: W - mR, y1: Y(0), y2: Y(0), stroke: "var(--baseline)", "stroke-width": 1 }, svg);
 
@@ -860,27 +958,27 @@
         });
         topY = yCur + 2;
         rows = s.series.map(function (sr) { return { name: sr.name, color: sr.color, val: sr.values[i] }; });
-      } else {
+      } else if (v !== null) {
         var h1 = (v / yMax) * plotH;
-        segs.push(el("path", { d: barPath(x, Y(0), barW, h1, 4), fill: cfg.color, class: "bar", "fill-opacity": partial ? 0.45 : 1 }));
+        segs.push(el("path", { d: barPath(x, Y(0), barW, h1, 4), fill: barColor, class: "bar", "fill-opacity": partial ? 0.45 : 1 }));
         topY = Y(0) - h1;
       }
 
-      var aria = s.buckets[i].label + ": " + fmtN(v) +
-        (s.series ? " total — " + rows.map(function (r) { return fmtN(r.val) + " " + r.name; }).join(", ") : "");
+      var aria = s.buckets[i].label + ": " + fmtV(v) +
+        (s.series ? " total — " + rows.map(function (r) { return fmtV(r.val) + " " + r.name; }).join(", ") : "");
       var extraRows = [];
       if (s.prior && s.prior[i] !== null) {
         extraRows.push({ name: cfg.priorName || PRIOR_LABEL, color: "var(--text-muted)", val: s.prior[i] });
-        aria += "; " + (cfg.priorName || PRIOR_LABEL).toLowerCase() + ": " + fmtN(s.prior[i]);
+        aria += "; " + (cfg.priorName || PRIOR_LABEL).toLowerCase() + ": " + fmtV(s.prior[i]);
       }
       if (s.prior2 && s.prior2.values[i] !== null) {
         extraRows.push({ name: s.prior2.name, color: s.prior2.color, dash: true, val: s.prior2.values[i] });
-        aria += "; " + s.prior2.name.toLowerCase() + ": " + fmtN(s.prior2.values[i]);
+        aria += "; " + s.prior2.name.toLowerCase() + ": " + fmtV(s.prior2.values[i]);
       }
       (s.others || []).forEach(function (o) {
         if (o.values[i] === null) return;
         extraRows.push({ name: o.name, color: o.color, shape: o.shape, val: o.values[i] });
-        aria += "; " + o.name + ": " + fmtN(o.values[i]);
+        aria += "; " + o.name + ": " + fmtV(o.values[i]);
       });
       if (extraRows.length) rows = (rows || []).concat(extraRows);
       aria += partial ? " (partial period)" : "";
@@ -892,8 +990,9 @@
       segs.forEach(function (sg) { svg.appendChild(sg); });
       function on() {
         segs.forEach(function (sg) { sg.classList.add("hot"); });
-        showTip(hit.getBoundingClientRect(), s.buckets[i].label, v,
-          partial ? "Partial period — still accumulating" : null, rows);
+        showTip(hit.getBoundingClientRect(), s.buckets[i].label, fmtV(v),
+          partial ? "Partial period — still accumulating" : null,
+          rows ? rows.map(function (r) { return Object.assign({}, r, { val: fmtV(r.val) }); }) : null);
       }
       function off() { segs.forEach(function (sg) { sg.classList.remove("hot"); }); hideTip(); }
       hit.addEventListener("pointerenter", on);
@@ -905,7 +1004,7 @@
       var isLabel = (i === maxIdx && v > 0) || (i === latestIdx && i !== maxIdx && v > 0 && n > 2);
       if (isLabel && v > 0) {
         el("text", { x: x + barW / 2, y: topY - 5, "text-anchor": "middle", "font-size": 10.5, "font-weight": 600, fill: "var(--text-secondary)" }, svg)
-          .textContent = fmtN(v);
+          .textContent = fmtV(v);
       }
     });
 
@@ -1105,10 +1204,10 @@
       }
       var hasPrior = s.prior && s.prior.some(function (p) { return p !== null; });
       var legendEntries = [];
-      if (cfg.series) {
-        cfg.series.forEach(function (sd) { legendEntries.push({ name: sd.name, color: sd.color }); });
+      if (s.series) {
+        s.series.forEach(function (sd) { legendEntries.push({ name: sd.name, color: sd.color }); });
       } else if (hasPrior) {
-        legendEntries.push({ name: "2026", color: cfg.color });
+        legendEntries.push({ name: s.pct ? curShort() + " share, 2026" : "2026", color: cfg.color || "var(--s-soma)" });
       }
       if (hasPrior) legendEntries.push({ name: cfg.priorName || PRIOR_LABEL, color: "var(--text-muted)", line: true });
       if (s.prior2 && s.prior2.values.some(function (p) { return p !== null; })) {
@@ -1117,8 +1216,8 @@
       (s.others || []).forEach(function (o) {
         legendEntries.push({ name: o.name, color: o.color, shape: o.shape });
       });
-      if (s.others && !cfg.series && !legendEntries.some(function (e) { return e.name === "2026"; })) {
-        legendEntries.unshift({ name: curShort() + " 2026", color: cfg.color });
+      if (s.others && !s.series && !hasPrior) {
+        legendEntries.unshift({ name: curShort() + " 2026", color: cfg.color || "var(--s-soma)" });
       }
       if (legendEntries.length) {
         var leg = document.createElement("div");
@@ -1143,10 +1242,11 @@
       // table view
       var tbl = document.createElement("table");
       var cap = document.createElement("caption");
-      cap.textContent = cfg.title + " — " + (s.monthlyOnly ? "monthly" : state.gran) + " counts";
+      cap.textContent = cfg.title + " — " + (s.monthlyOnly ? "monthly" : state.gran) + (s.pct ? " share of citywide" : " counts");
       tbl.appendChild(cap);
       var headers = ["Period"].concat(
-        s.series ? s.series.map(function (sr) { return sr.name; }).concat(["Total"]) : ["Count"]);
+        s.series ? s.series.map(function (sr) { return sr.name; }).concat(["Total"])
+                 : [s.pct ? "% of citywide" : "Count"]);
       if (hasPrior) headers.push(cfg.priorName || PRIOR_LABEL);
       if (s.prior2) headers.push(s.prior2.name);
       (s.others || []).forEach(function (o) { headers.push(o.name); });
@@ -1171,7 +1271,8 @@
         (s.others || []).forEach(function (o) { nums.push(o.values[i]); });
         nums.forEach(function (nv) {
           var td = document.createElement("td");
-          td.className = "num"; td.textContent = nv === null ? "—" : fmtN(nv);
+          td.className = "num";
+          td.textContent = nv === null ? "—" : (s.pct ? fmtN(nv) + "%" : fmtN(nv));
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
@@ -1271,6 +1372,15 @@
     renderAll();
   });
 
+  var cityToggle = document.getElementById("cityToggle");
+  try { state.pctMode = localStorage.getItem("soma-pct") === "on"; } catch (e) {}
+  cityToggle.checked = state.pctMode;
+  cityToggle.addEventListener("change", function () {
+    state.pctMode = cityToggle.checked;
+    try { localStorage.setItem("soma-pct", state.pctMode ? "on" : "off"); } catch (e) {}
+    renderAll();
+  });
+
   var themeBtn = document.getElementById("themeBtn");
   var themes = ["light", "dark", "auto"];
   function applyTheme(t, save) {
@@ -1347,7 +1457,8 @@
     loadHood(savedHood),
     loadEms().catch(function (e) { state.errors.ems = e.message; }),
     loadDeaths().catch(function (e) { state.errors.deaths = e.message; }),
-    loadDispo().catch(function (e) { state.errors.dispo = e.message; })
+    loadDispo().catch(function (e) { state.errors.dispo = e.message; }),
+    loadCity().catch(function (e) { state.errors.city = e.message; })
   ]).then(function () {
     renderAll();
     // prefetch the other neighborhoods so the comparison dots (and instant
