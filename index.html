@@ -253,6 +253,7 @@
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
+    <p>The two &ldquo;&mdash; citywide&rdquo; charts show San Francisco totals for suspicious-person dispatches and homelessness-related 311 requests, using identical definitions to the neighborhood versions with no geographic filter. They answer whether the city&rsquo;s overall numbers are rising or falling, independent of any one neighborhood, and don&rsquo;t change with the selected tab.</p>
     <p>&ldquo;Show as % of citywide&rdquo; re-draws each neighborhood chart as that neighborhood&rsquo;s share of the citywide total for the same period (e.g., SoMa&rsquo;s drug offenses as a percentage of all SF drug offenses) &mdash; a scale-free way to see whether activity is concentrating in or leaving a neighborhood. In this mode the prior-year line and comparison dots become shares too, and stacked charts show the neighborhood&rsquo;s total share. The two citywide overdose charts are unaffected.</p>
     <p>The circle and diamond dots on each neighborhood chart show the other two neighborhoods&rsquo; totals for the same period, for side-by-side comparison (also listed in each chart&rsquo;s tooltip and table). The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
     <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a> and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
@@ -510,20 +511,33 @@
       });
       through.police = maxDay;
     });
+    var C = ensureHood("__city__");  // pseudo-neighborhood powering the citywide charts
     var pCalls = soql("2zdj-bwza", {
-      "$select": "date_trunc_ymd(received_datetime) as d, count(*) as n",
+      "$select": "date_trunc_ymd(received_datetime) as d, onview_flag as f, count(*) as n",
       "$where": "received_datetime>='" + PRIOR_START + "'" +
         " AND call_type_final_desc='SUSPICIOUS PERSON'" +
         " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
-      "$group": "d", "$limit": "20000"
+      "$group": "d, f", "$limit": "20000"
     }).then(function (rows) {
+      C.daily.suspCallsPublic = new Map();
+      C.daily.suspCallsOfficer = new Map();
+      C.prior.suspCalls = new Map();
+      C.prior.suspCallsPublic = new Map();
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.d).slice(0, 10);
-        if (!maxDay || day > maxDay) maxDay = day;
-        add(daily.suspCalls, day, +r.n);
+        var n = +r.n;
+        add(daily.suspCalls, day, n);
+        if (day < START) {
+          add(C.prior.suspCalls, day, n);
+          if (r.f === "N") add(C.prior.suspCallsPublic, day, n);
+        } else {
+          if (!maxDay || day > maxDay) maxDay = day;
+          add(r.f === "N" ? C.daily.suspCallsPublic : C.daily.suspCallsOfficer, day, n);
+        }
       });
       through.calls = maxDay;
+      C.through.calls = maxDay;
     });
     var p311 = soql("vw6y-z8j6", {
       "$select": "date_trunc_ymd(requested_datetime) as d, count(*) as n",
@@ -538,9 +552,12 @@
         add(daily.homeless, day, +r.n);
       });
       through.t311 = maxDay;
+      C.daily.homeless = daily.homeless;
+      C.through.t311 = maxDay;
     });
     return Promise.all([pPolice, pCalls, p311]).then(function () {
       state.city = { daily: daily, through: through };
+      C.loaded = true;
     });
   }
 
@@ -644,6 +661,18 @@
     { id: "dispo",    kind: "dispo", geo: "SoMa · Tenderloin · Mission",
       title: "How officer-initiated “suspicious person” stops end",
       sub: "Share of stop outcomes by neighborhood, before vs. since the RESET Center opening", src: "dispo" },
+    { id: "suspcity", kind: "stack", geo: "Citywide", hoodOverride: "__city__",
+      priorKey: "suspCalls", priorName: "Total · same period 2025",
+      priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
+      title: "“Suspicious person” calls & stops — citywide",
+      sub: "All of San Francisco · same definitions as the neighborhood chart above", src: "calls",
+      series: [
+        { key: "suspCallsPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
+        { key: "suspCallsOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
+      ] },
+    { id: "homelesscity", kind: "daily", key: "homeless", color: "var(--s-city)", geo: "Citywide", hoodOverride: "__city__",
+      title: "Homelessness-related 311 requests — citywide",
+      sub: "All of San Francisco · 311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
       title: "Overdose-related 911 responses", sub: "EMS responses · published citywide only, ~3-month lag", src: "ems" },
     { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
@@ -676,7 +705,7 @@
   function seriesFor(cfg, gran) {
     // returns {buckets:[{label, short, partial}], values:[n], through, note}
     if (cfg.kind === "daily" || cfg.kind === "stack") {
-      var H = cur();
+      var H = cfg.hoodOverride ? ensureHood(cfg.hoodOverride) : cur();
       var through = H.through[cfg.src];
       if (!through) return null;
       var buckets = makeBuckets(gran, through);
@@ -709,7 +738,7 @@
         values: buckets.map(function (b) { return priorDaily(pmap2, b, gran); })
       } : null;
       // comparison dots: the other two neighborhoods' totals per bucket
-      var others = !state.compare ? [] : HOODS.filter(function (h) { return h.name !== state.hood; })
+      var others = (!state.compare || cfg.hoodOverride) ? [] : HOODS.filter(function (h) { return h.name !== state.hood; })
         .map(function (h, idx) {
           var H2 = state.hoods[h.name];
           if (!H2 || !H2.loaded) return null;
@@ -1185,7 +1214,9 @@
         renderDispoCard(card, body, thru);
         return;
       }
-      var srcErr = (cfg.src === "ems" || cfg.src === "deaths") ? state.errors[cfg.src] : cur().errors[cfg.src];
+      var srcErr = cfg.hoodOverride ? state.errors.city
+        : (cfg.src === "ems" || cfg.src === "deaths") ? state.errors[cfg.src]
+        : cur().errors[cfg.src];
       if (srcErr) {
         var err = document.createElement("div");
         err.className = "status error";
@@ -1401,7 +1432,7 @@
   /* ---------- neighborhood tabs ---------- */
   function showLoadingCards() {
     CHARTS.forEach(function (cfg) {
-      if (cfg.src === "ems" || cfg.src === "deaths") return;
+      if (cfg.src === "ems" || cfg.src === "deaths" || cfg.hoodOverride || cfg.kind === "dispo") return;
       var card = document.getElementById("card-" + cfg.id);
       var body = card.querySelector(".chart-body");
       body.replaceChildren();
