@@ -230,11 +230,11 @@
     <h2>What each chart counts</h2>
     <dl>
       <dt>Drug offenses</dt>
-      <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all so every drug violation is counted here exactly once.</dd>
+      <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all. Counts are <em>incidents, not charges</em>: a single arrest that files several drug charges (which appears as several rows in the raw data) is counted once.</dd>
       <dt>&ldquo;Suspicious person&rdquo; calls &amp; stops</dt>
       <dd>Law-enforcement dispatched records whose final call type is &ldquo;Suspicious Person,&rdquo; split by who initiated them: <em>911 calls from the public</em> (records where someone called it in) versus <em>officer-initiated &ldquo;on-view&rdquo; records</em>, where an officer or city street team observed something on patrol and generated the record themselves (includes HSOC street-team referrals). The two measure different things &mdash; community reporting versus police activity. Excludes records cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
       <dt>Larceny, violent crime &amp; burglary</dt>
-      <dd>SFPD incident reports, stacked in three groups: <em>larceny theft</em> (the &ldquo;Larceny Theft&rdquo; category &mdash; thefts without force or breaking in, including from vehicles and shoplifting), <em>violent crime</em> (the FBI definition: homicide, rape, robbery, and aggravated assault &mdash; simple assault is not included), and <em>burglary</em> (the &ldquo;Burglary&rdquo; category &mdash; unlawful entry of a building). Motor vehicle theft is not included in any group.</dd>
+      <dd>SFPD incident reports, stacked in three groups: <em>larceny theft</em> (the &ldquo;Larceny Theft&rdquo; category &mdash; thefts without force or breaking in, including from vehicles and shoplifting), <em>violent crime</em> (the FBI definition: homicide, rape, robbery, and aggravated assault &mdash; simple assault is not included), and <em>burglary</em> (the &ldquo;Burglary&rdquo; category &mdash; unlawful entry of a building). Motor vehicle theft is not included in any group. Counts are incidents, not charges; a rare incident spanning two groups (e.g., burglary plus robbery) counts once in each. Note that SFPD&rsquo;s own CompStat dashboard reports somewhat lower totals for the same categories because it uses stricter federal (UCR) counting rules; trends match closely between the two.</dd>
       <dt>Homelessness-related 311 requests</dt>
       <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing. No prior-year line on this chart: the city only began routing cases this way in mid-2025, so a year-over-year comparison would reflect the process change, not conditions on the street.</dd>
       <dt>How officer-initiated &ldquo;suspicious person&rdquo; stops end</dt>
@@ -388,32 +388,45 @@
     // drugs = every incident whose SUBcategory is "Drug Violation", regardless of
     // parent category (they occur under Drug Offense, Drug Violation, and
     // Disorderly Conduct). violent = FBI definition: homicide, rape, robbery,
-    // and aggravated (not simple) assault.
-    return soql("wg3w-h783", {
-      "$select": "incident_date, incident_category, incident_subcategory, count(*) as n",
-      "$where": "incident_date>='" + PRIOR_START + "' AND analysis_neighborhood='" + hood + "' AND (" +
-        "incident_subcategory='Drug Violation'" +
-        " OR incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
+    // and aggravated (not simple) assault. Counts use count(distinct incident_id)
+    // so an incident with multiple charges filed is counted once, matching how
+    // SFPD reports incidents (the raw dataset has one row per charge).
+    var whereBase = "incident_date>='" + PRIOR_START + "' AND analysis_neighborhood='" + hood + "'";
+    var pDrugs = soql("wg3w-h783", {
+      "$select": "incident_date, count(distinct incident_id) as n",
+      "$where": whereBase + " AND incident_subcategory='Drug Violation'",
+      "$group": "incident_date", "$limit": "20000"
+    });
+    var pCrime = soql("wg3w-h783", {
+      "$select": "incident_date, incident_category, count(distinct incident_id) as n",
+      "$where": whereBase + " AND (incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
         " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
-      "$group": "incident_date, incident_category, incident_subcategory",
-      "$limit": "40000"
-    }).then(function (rows) {
+      "$group": "incident_date, incident_category", "$limit": "40000"
+    });
+    return Promise.all([pDrugs, pCrime]).then(function (res) {
       ["drugs", "larceny", "violent", "burglary"].forEach(function (k) { H.daily[k] = new Map(); });
       H.prior.drugs = new Map();
       H.prior.crime = new Map();  // prior-year total of larceny + violent + burglary
       var maxDay = null;
-      rows.forEach(function (r) {
+      res[0].forEach(function (r) {
         var day = String(r.incident_date).slice(0, 10);
         var n = +r.n;
-        var k = r.incident_subcategory === "Drug Violation" ? "drugs"
-              : r.incident_category === "Larceny Theft" ? "larceny"
+        if (day >= START) {
+          if (!maxDay || day > maxDay) maxDay = day;
+          H.daily.drugs.set(day, (H.daily.drugs.get(day) || 0) + n);
+        } else {
+          H.prior.drugs.set(day, (H.prior.drugs.get(day) || 0) + n);
+        }
+      });
+      res[1].forEach(function (r) {
+        var day = String(r.incident_date).slice(0, 10);
+        var n = +r.n;
+        var k = r.incident_category === "Larceny Theft" ? "larceny"
               : r.incident_category === "Burglary" ? "burglary"
               : "violent";
         if (day >= START) {
           if (!maxDay || day > maxDay) maxDay = day;
           H.daily[k].set(day, (H.daily[k].get(day) || 0) + n);
-        } else if (k === "drugs") {
-          H.prior.drugs.set(day, (H.prior.drugs.get(day) || 0) + n);
         } else {
           H.prior.crime.set(day, (H.prior.crime.get(day) || 0) + n);
         }
@@ -494,22 +507,28 @@
     var daily = { drugs: new Map(), crime: new Map(), suspCalls: new Map(), homeless: new Map() };
     var through = {};
     function add(map, day, n) { map.set(day, (map.get(day) || 0) + n); }
-    var pPolice = soql("wg3w-h783", {
-      "$select": "incident_date, incident_category, incident_subcategory, count(*) as n",
-      "$where": "incident_date>='" + PRIOR_START + "' AND (" +
-        "incident_subcategory='Drug Violation'" +
-        " OR incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
-        " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
-      "$group": "incident_date, incident_category, incident_subcategory",
-      "$limit": "50000"
+    var pPoliceDrugs = soql("wg3w-h783", {
+      "$select": "incident_date, count(distinct incident_id) as n",
+      "$where": "incident_date>='" + PRIOR_START + "' AND incident_subcategory='Drug Violation'",
+      "$group": "incident_date", "$limit": "20000"
     }).then(function (rows) {
       var maxDay = null;
       rows.forEach(function (r) {
         var day = String(r.incident_date).slice(0, 10);
         if (!maxDay || day > maxDay) maxDay = day;
-        add(r.incident_subcategory === "Drug Violation" ? daily.drugs : daily.crime, day, +r.n);
+        add(daily.drugs, day, +r.n);
       });
       through.police = maxDay;
+    });
+    var pPoliceCrime = soql("wg3w-h783", {
+      "$select": "incident_date, incident_category, count(distinct incident_id) as n",
+      "$where": "incident_date>='" + PRIOR_START + "' AND (incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
+        " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
+      "$group": "incident_date, incident_category", "$limit": "40000"
+    }).then(function (rows) {
+      rows.forEach(function (r) {
+        add(daily.crime, String(r.incident_date).slice(0, 10), +r.n);
+      });
     });
     var C = ensureHood("__city__");  // pseudo-neighborhood powering the citywide charts
     var pCalls = soql("2zdj-bwza", {
@@ -555,7 +574,7 @@
       C.daily.homeless = daily.homeless;
       C.through.t311 = maxDay;
     });
-    return Promise.all([pPolice, pCalls, p311]).then(function () {
+    return Promise.all([pPoliceDrugs, pPoliceCrime, pCalls, p311]).then(function () {
       state.city = { daily: daily, through: through };
       C.loaded = true;
     });
