@@ -136,6 +136,18 @@
     display: flex; justify-content: space-between; align-items: center;
     font-size: 11.5px; color: var(--text-muted); margin-top: 4px; gap: 8px;
   }
+  .stale-badge {
+    display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+    padding: 1px 7px; border-radius: 999px; margin-left: 6px;
+    background: rgba(208,59,59,0.12); color: var(--delta-bad);
+  }
+  .freshness {
+    display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
+    font-size: 12px; color: var(--text-muted); margin: 0 0 14px;
+  }
+  .freshness .fresh-item { white-space: nowrap; }
+  .freshness .fresh-item b { font-weight: 600; color: var(--text-secondary); }
+  .freshness .fresh-item.is-stale b { color: var(--delta-bad); }
   .tbl-btn {
     border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 11.5px;
     cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 2px 0;
@@ -223,6 +235,8 @@
     <span class="range-note" id="rangeNote">Loading data&hellip;</span>
   </div>
 
+  <div class="freshness" id="freshness"></div>
+
   <div class="tiles" id="tiles"></div>
   <div class="grid" id="grid"></div>
 
@@ -249,7 +263,7 @@
         </ul>
         Percentages are each outcome&rsquo;s share of that neighborhood&rsquo;s stops in the period. Public 911 calls are not included in this table &mdash; only stops officers initiated themselves. Per DataSF, disposition codes are informational and recorded in the field &mdash; arrest dispositions here will not exactly match official SFPD arrest statistics, so use this table for comparing patterns, not as official counts.</dd>
       <dt>Overdose-related 911 responses</dt>
-      <dd>Opioid overdose-related 911 calls responded to by ambulances, per SF Emergency Medical Services patient-care records. Citywide only.</dd>
+      <dd>Opioid overdose-related 911 calls responded to by ambulances, per SF Emergency Medical Services patient-care records. Citywide only. <strong>Publication is currently paused:</strong> per DataSF, the State is transitioning to a new data system and the city is not receiving updated 911 call data during the migration, so this chart has not advanced since spring 2026. It will resume automatically when the city publishes again.</dd>
       <dt>Drug overdose deaths (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
@@ -267,8 +281,8 @@
       <a href="https://data.sfgov.org/d/ed3a-sn39" target="_blank" rel="noopener">Overdose-Related 911 Responses (EMS)</a> &middot;
       <a href="https://data.sfgov.org/d/jxrr-bmra" target="_blank" rel="noopener">Preliminary Unintentional Drug Overdose Deaths</a>
     </p>
-    <p>The neighborhood tabs use the city&rsquo;s official Analysis Neighborhood boundaries (&ldquo;South of Market,&rdquo; &ldquo;Tenderloin,&rdquo; &ldquo;Mission&rdquo;), the standard geography stamped on DataSF datasets. Overdose 911 responses and overdose deaths are published citywide only &mdash; DPH releases neighborhood-level overdose data solely in quarterly PDF reports, so those two charts do not change with the selected tab. Police and 311 counts reflect reports/dispatches, not verified incidents, and recent days may still be loading into the city portal. Death counts are preliminary medical-examiner determinations and are revised. EMS overdose data is published on a ~3-month lag.</p>
-    <p>Charts refresh with the latest city data every time this page is opened.</p>
+    <p>The neighborhood tabs use the city&rsquo;s official Analysis Neighborhood boundaries (&ldquo;South of Market,&rdquo; &ldquo;Tenderloin,&rdquo; &ldquo;Mission&rdquo;), the standard geography stamped on DataSF datasets. Overdose 911 responses and overdose deaths are published citywide only &mdash; DPH releases neighborhood-level overdose data solely in quarterly PDF reports, so those two charts do not change with the selected tab. Police and 311 counts reflect reports/dispatches, not verified incidents, and recent days may still be loading into the city portal. Death counts are preliminary medical-examiner determinations and are revised. EMS overdose 911 data is currently paused at the source during a state data-system migration.</p>
+    <p>Charts refresh with the latest city data every time this page is opened. Police, dispatch, and 311 data update daily (typically through yesterday); overdose deaths update monthly.</p>
   </footer>
 </div>
 
@@ -693,7 +707,7 @@
       title: "Homelessness-related 311 requests — citywide",
       sub: "All of San Francisco · 311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
     { id: "ems",      kind: "ems",   color: "var(--s-city)", geo: "Citywide",
-      title: "Overdose-related 911 responses", sub: "EMS responses · published citywide only, ~3-month lag", src: "ems" },
+      title: "Overdose-related 911 responses", sub: "EMS responses · citywide only · publication paused during state data-system migration", src: "ems" },
     { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
       title: "Drug overdose deaths (preliminary)", sub: "Chief Medical Examiner · citywide only · always monthly", src: "deaths" }
   ];
@@ -1287,7 +1301,15 @@
       var thruTxt = "Data through " + fmtDay(s.through) + ", " + s.through.slice(0, 4);
       if (s.monthlyOnly && state.gran === "weekly") thruTxt = "Monthly only · " + thruTxt;
       if (s.note) thruTxt += " · " + s.note;
-      thru.textContent = thruTxt;
+      thru.replaceChildren(document.createTextNode(thruTxt));
+      // flag a chart whose source has stopped publishing
+      var staleLimit = (cfg.src === "deaths") ? 75 : (cfg.src === "ems") ? 45 : 5;
+      if (daysAgo(s.through) > staleLimit) {
+        var badge = document.createElement("span");
+        badge.className = "stale-badge";
+        badge.textContent = "Not updating · " + daysAgo(s.through) + " days old";
+        thru.appendChild(badge);
+      }
 
       // table view
       var tbl = document.createElement("table");
@@ -1331,10 +1353,48 @@
       tblWrap.appendChild(tbl);
     });
     renderTiles();
-    var notes = [];
-    if (cur().through.police) notes.push("SFPD data through " + fmtDay(cur().through.police));
-    if (cur().through.t311) notes.push("311 through " + fmtDay(cur().through.t311));
-    document.getElementById("rangeNote").textContent = notes.length ? notes.join(" · ") : "";
+    renderFreshness();
+    document.getElementById("rangeNote").textContent = "";
+  }
+
+  /* ---------- data freshness strip ---------- */
+  // days between a YYYY-MM-DD date and today
+  function daysAgo(day) {
+    return Math.round((s2d(today()) - s2d(day)) / 86400000);
+  }
+  function renderFreshness() {
+    var el0 = document.getElementById("freshness");
+    el0.replaceChildren();
+    var H = cur();
+    var items = [
+      { label: "Police incidents", day: H.through.police, staleAfter: 4 },
+      { label: "Dispatch calls", day: H.through.calls, staleAfter: 4 },
+      { label: "311 cases", day: H.through.t311, staleAfter: 4 },
+      { label: "Overdose deaths", day: state.through.deaths, staleAfter: 75, monthly: true },
+      { label: "Overdose 911 (EMS)", day: state.through.ems, staleAfter: 45 }
+    ];
+    var loaded = document.createElement("span");
+    loaded.className = "fresh-item";
+    var lb = document.createElement("b"); lb.textContent = "Loaded just now";
+    loaded.appendChild(lb);
+    loaded.appendChild(document.createTextNode(" · live from DataSF ·"));
+    el0.appendChild(loaded);
+
+    items.forEach(function (it) {
+      if (!it.day) return;
+      var span = document.createElement("span");
+      span.className = "fresh-item";
+      var age = daysAgo(it.day);
+      var stale = age > it.staleAfter;
+      if (stale) span.classList.add("is-stale");
+      var b = document.createElement("b");
+      b.textContent = it.label + ":";
+      span.appendChild(b);
+      var txt = " " + (it.monthly ? fmtMonth(it.day) : fmtDay(it.day));
+      if (stale) txt += " (" + age + " days ago)";
+      span.appendChild(document.createTextNode(txt));
+      el0.appendChild(span);
+    });
   }
 
   /* ---------- stat tiles ---------- */
