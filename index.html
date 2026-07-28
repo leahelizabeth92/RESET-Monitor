@@ -244,7 +244,7 @@
     <h2>What each chart counts</h2>
     <dl>
       <dt>Drug offenses</dt>
-      <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all. Counts are <em>incidents, not charges</em>: a single arrest that files several drug charges (which appears as several rows in the raw data) is counted once.</dd>
+      <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all. Counts are <em>incidents, not charges</em>: a single incident that files several drug charges (which appears as several rows in the raw data) is counted once. <strong>An incident here is not the same as an arrest.</strong> SFPD records the outcome in a single &ldquo;Cite or Arrest Adult&rdquo; resolution that does not separate a citation from a booking, so the two can&rsquo;t be split directly from this data &mdash; but the charge mix is telling: the large majority are low-level possession or paraphernalia offenses (led by paraphernalia possession) that in San Francisco are typically cite-and-release, and only a minority &mdash; sale, possession-for-sale, or armed charges &mdash; are the kind that reliably end in someone being taken into custody.</dd>
       <dt>&ldquo;Suspicious person&rdquo; calls &amp; stops</dt>
       <dd>Law-enforcement dispatched records whose final call type is &ldquo;Suspicious Person,&rdquo; split by who initiated them: <em>911 calls from the public</em> (records where someone called it in) versus <em>officer-initiated &ldquo;on-view&rdquo; records</em>, where an officer or city street team observed something on patrol and generated the record themselves (includes HSOC street-team referrals). The two measure different things &mdash; community reporting versus police activity. Excludes records cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
       <dt>Larceny, violent crime &amp; burglary</dt>
@@ -1462,9 +1462,7 @@
     var defs = [
       { label: "Drug offenses · " + curShort() + " YTD", color: "var(--s-soma)", value: ytdOfDaily("drugs"), delta: monthlyDelta("drugs"), err: cur().errors.police },
       { label: "Homelessness-related 311 · " + curShort() + " YTD", color: "var(--s-soma)", value: ytdOfDaily("homeless"), delta: monthlyDelta("homeless"), err: cur().errors.t311 },
-      { label: "Overdose 911 responses · SF YTD", color: "var(--s-city)",
-        value: state.ems.length ? state.ems.filter(function (r) { return r.week >= START; }).reduce(function (a, r) { return a + r.n; }, 0) : null,
-        note: state.through.ems ? "through " + fmtDay(state.through.ems) : null, err: state.errors.ems },
+      { label: "Officer-initiated stops · " + curShort() + " YTD", color: "var(--s-soma2)", value: ytdOfDaily("suspCallsOfficer"), delta: monthlyDelta("suspCallsOfficer"), err: cur().errors.calls },
       { label: "Overdose deaths · SF YTD", color: "var(--s-city)",
         value: state.deaths.length ? state.deaths.reduce(function (a, r) { return a + r.n; }, 0) : null,
         note: state.through.deaths ? "preliminary · through " + fmtMonth(state.through.deaths).replace(" 2026", "") : null, err: state.errors.deaths }
