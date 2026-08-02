@@ -1333,7 +1333,7 @@
       if (s.note) thruTxt += " · " + s.note;
       thru.replaceChildren(document.createTextNode(thruTxt));
       // flag a chart whose source has stopped publishing
-      var staleLimit = (cfg.src === "deaths") ? 75 : (cfg.src === "ems") ? 45 : (cfg.src === "ocme") ? 250 : 5;
+      var staleLimit = (cfg.src === "deaths") ? 75 : (cfg.src === "ems") ? 45 : (cfg.src === "ocme") ? 250 : (cfg.src === "police") ? 9 : 5;
       if (daysAgo(s.through) > staleLimit) {
         var badge = document.createElement("span");
         badge.className = "stale-badge";
@@ -1397,7 +1397,11 @@
     el0.replaceChildren();
     var H = cur();
     var items = [
-      { label: "Police incidents", day: H.through.police, staleAfter: 4 },
+      // police incidents are dated by when the crime occurred; reports are filed
+      // and entered days later, so the newest incident_date naturally trails ~5
+      // days even on a healthy daily feed. Dispatch/311 timestamp at call time
+      // and stay current-to-yesterday, so they use a tighter window.
+      { label: "Police incidents", day: H.through.police, staleAfter: 9 },
       { label: "Dispatch calls", day: H.through.calls, staleAfter: 4 },
       { label: "311 cases", day: H.through.t311, staleAfter: 4 },
       { label: "Overdose deaths (citywide)", day: state.through.deaths, staleAfter: 75, monthly: true },
