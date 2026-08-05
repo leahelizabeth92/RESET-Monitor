@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SF Drug Activity &amp; Street Conditions — by Police District</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --s-soma:         #2a78d6;
+    --s-soma2:        #1baf7a;
+    --s-soma3:        #c98500;
+    --s-prior2:       #c98500;
+    --dot-a:          #d55181;
+    --dot-b:          #4a3aa7;
+    --s-city:         #eb6834;
+    --delta-bad:      #d03b3b;
+    --delta-good:     #006300;
+    --ghost:          rgba(11,11,11,0.045);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --s-soma:         #3987e5;
+      --s-soma2:        #199e70;
+      --dot-b:          #9085e9;
+      --s-city:         #d95926;
+      --delta-bad:      #e66767;
+      --delta-good:     #0ca30c;
+      --ghost:          rgba(255,255,255,0.06);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --s-soma:         #3987e5;
+    --s-soma2:        #199e70;
+    --dot-b:          #9085e9;
+    --s-city:         #d95926;
+    --delta-bad:      #e66767;
+    --delta-good:     #0ca30c;
+    --ghost:          rgba(255,255,255,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 48px; }
+
+  header.page { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+  h1 { font-size: 21px; font-weight: 650; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .page-sub { color: var(--text-secondary); font-size: 13px; margin: 0; }
+  .theme-btn {
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+  .theme-btn:hover { background: var(--ghost); }
+
+  .hood-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 16px 0 0; }
+  .hood-tabs button {
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-secondary);
+    border-radius: 999px; padding: 7px 18px; font: inherit; font-size: 13.5px; cursor: pointer;
+  }
+  .hood-tabs button:hover { background: var(--ghost); }
+  .hood-tabs button[aria-selected="true"] {
+    background: var(--s-soma); border-color: var(--s-soma); color: #fff; font-weight: 600;
+  }
+
+  .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 14px 0 16px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface-1); }
+  .seg button {
+    border: 0; background: transparent; color: var(--text-secondary);
+    font: inherit; font-size: 13px; padding: 7px 16px; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ghost); color: var(--text-primary); font-weight: 600; }
+  .controls .range-note { color: var(--text-muted); font-size: 12.5px; }
+  .cmp-toggle {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; color: var(--text-secondary); cursor: pointer; user-select: none;
+  }
+  .cmp-toggle input { accent-color: var(--s-soma); width: 15px; height: 15px; cursor: pointer; margin: 0; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px 12px;
+  }
+  .tile .t-label { font-size: 12.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .tile .t-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .tile .t-value { font-size: 30px; font-weight: 600; margin-top: 2px; line-height: 1.15; }
+  .tile .t-delta { font-size: 12px; margin-top: 3px; color: var(--text-muted); }
+  .tile .t-delta .up   { color: var(--delta-bad);  font-weight: 600; }
+  .tile .t-delta .down { color: var(--delta-good); font-weight: 600; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 14px; }
+  @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px 10px; position: relative;
+  }
+  .card h2 { font-size: 14.5px; font-weight: 650; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .badge {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
+    padding: 1px 7px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .card .sub { font-size: 12px; color: var(--text-muted); margin: 2px 0 6px; }
+  .card svg { display: block; width: 100%; height: auto; }
+  .card .foot {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11.5px; color: var(--text-muted); margin-top: 4px; gap: 8px;
+  }
+  .stale-badge {
+    display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+    padding: 1px 7px; border-radius: 999px; margin-left: 6px;
+    background: rgba(208,59,59,0.12); color: var(--delta-bad);
+  }
+  .freshness {
+    display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
+    font-size: 12px; color: var(--text-muted); margin: 0 0 14px;
+  }
+  .freshness .fresh-item { white-space: nowrap; }
+  .freshness .fresh-item b { font-weight: 600; color: var(--text-secondary); }
+  .freshness .fresh-item.is-stale b { color: var(--delta-bad); }
+  .tbl-btn {
+    border: 0; background: none; color: var(--text-muted); font: inherit; font-size: 11.5px;
+    cursor: pointer; text-decoration: underline; text-underline-offset: 2px; padding: 2px 0;
+  }
+  .tbl-btn:hover { color: var(--text-secondary); }
+  .card table { width: 100%; border-collapse: collapse; font-size: 12px; margin: 6px 0 4px; }
+  .card table caption { text-align: left; font-size: 11.5px; color: var(--text-muted); padding-bottom: 4px; }
+  .card th, .card td { text-align: left; padding: 3px 8px 3px 0; border-bottom: 1px solid var(--grid); }
+  .card td.num, .card th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .card .status { font-size: 12.5px; color: var(--text-muted); padding: 34px 0; text-align: center; }
+  .card .status.error { color: var(--delta-bad); }
+  .card.wide { grid-column: 1 / -1; }
+  .dispo-wrap { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 4px; }
+  .dispo-wrap > div { flex: 1 1 340px; min-width: 0; overflow-x: auto; }
+  .dispo-wrap h3 { font-size: 12.5px; font-weight: 600; color: var(--text-secondary); margin: 0 0 4px; }
+
+  .tooltip {
+    position: absolute; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+    padding: 7px 10px; font-size: 12px; min-width: 120px;
+  }
+  .tooltip .tt-period { color: var(--text-secondary); }
+  .tooltip .tt-value { font-size: 16px; font-weight: 650; }
+  .tooltip .tt-note { color: var(--text-muted); font-size: 11px; }
+  .tooltip .tt-row { display: flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 2px; white-space: nowrap; }
+  .tooltip .tt-key { width: 10px; height: 3px; border-radius: 2px; flex: 0 0 auto; }
+  .tooltip .tt-row strong { font-weight: 650; }
+  .tooltip .tt-row .tt-name { color: var(--text-secondary); }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
+  .legend .key { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+  .legend .sw.line { height: 3px; border-radius: 2px; }
+  .legend .sw.circle { width: 9px; height: 9px; border-radius: 50%; }
+  .legend .sw.diamond { width: 8px; height: 8px; border-radius: 1px; transform: rotate(45deg); }
+  .tooltip .tt-key.circle { width: 8px; height: 8px; border-radius: 50%; }
+  .tooltip .tt-key.diamond { width: 7px; height: 7px; border-radius: 1px; transform: rotate(45deg); }
+
+  .bar { transition: filter .08s; }
+  .bar.hot { filter: brightness(1.15); }
+  .hit { fill: transparent; }
+  .hit:focus { outline: none; }
+  .hit:focus-visible + .bar, .hit:focus + .bar { filter: brightness(1.15); }
+
+  .defs {
+    margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--grid);
+    font-size: 12.5px; color: var(--text-secondary); max-width: 860px;
+  }
+  .defs h2 { font-size: 14.5px; font-weight: 650; color: var(--text-primary); margin: 0 0 8px; }
+  .defs dt { font-weight: 600; color: var(--text-primary); margin-top: 10px; }
+  .defs dd { margin: 2px 0 0; line-height: 1.5; }
+  .defs a { color: var(--text-secondary); }
+  .defs p { margin: 12px 0 0; color: var(--text-muted); font-size: 12px; }
+
+  footer.page {
+    margin-top: 26px; padding-top: 14px; border-top: 1px solid var(--grid);
+    font-size: 12px; color: var(--text-muted);
+  }
+  footer.page a { color: var(--text-secondary); }
+  footer.page p { margin: 4px 0; }
+
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page">
+    <div>
+      <h1>Drug Activity &amp; Street Conditions</h1>
+      <p class="page-sub"><span id="hoodName">Southern</span> Police District, San Francisco &middot; live from DataSF open data &middot; Jan&nbsp;1,&nbsp;2026&nbsp;&ndash;&nbsp;present</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button">Theme: Auto</button>
+  </header>
+
+  <div class="hood-tabs" role="tablist" aria-label="Neighborhood" id="hoodTabs"></div>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Time granularity">
+      <button type="button" id="btnWeekly" aria-pressed="true">Weekly</button>
+      <button type="button" id="btnMonthly" aria-pressed="false">Monthly</button>
+    </div>
+    <label class="cmp-toggle"><input type="checkbox" id="cmpToggle" checked> Compare neighborhoods</label>
+    <label class="cmp-toggle"><input type="checkbox" id="cityToggle"> Show as % of citywide</label>
+    <span class="range-note" id="rangeNote">Loading data&hellip;</span>
+  </div>
+
+  <div class="freshness" id="freshness"></div>
+
+  <div class="tiles" id="tiles"></div>
+  <div class="grid" id="grid"></div>
+
+  <section class="defs">
+    <h2>What each chart counts</h2>
+    <dl>
+      <dt>Drug offenses</dt>
+      <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all. Counts are <em>incidents, not charges</em>: a single incident that files several drug charges (which appears as several rows in the raw data) is counted once. <strong>An incident here is not the same as an arrest.</strong> SFPD records the outcome in a single &ldquo;Cite or Arrest Adult&rdquo; resolution that does not separate a citation from a booking, so the two can&rsquo;t be split directly from this data &mdash; but the charge mix is telling: the large majority are low-level possession or paraphernalia offenses (led by paraphernalia possession) that in San Francisco are typically cite-and-release, and only a minority &mdash; sale, possession-for-sale, or armed charges &mdash; are the kind that reliably end in someone being taken into custody.</dd>
+      <dt>&ldquo;Suspicious person&rdquo; calls &amp; stops</dt>
+      <dd>Law-enforcement dispatched records whose final call type is &ldquo;Suspicious Person,&rdquo; split by who initiated them: <em>911 calls from the public</em> (records where someone called it in) versus <em>officer-initiated &ldquo;on-view&rdquo; records</em>, where an officer or city street team observed something on patrol and generated the record themselves (includes HSOC street-team referrals). The two measure different things &mdash; community reporting versus police activity. Excludes records cancelled by dispatch (disposition CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
+      <dt>Larceny, violent crime &amp; burglary</dt>
+      <dd>SFPD incident reports, stacked in three groups: <em>larceny theft</em> (the &ldquo;Larceny Theft&rdquo; category &mdash; thefts without force or breaking in, including from vehicles and shoplifting), <em>violent crime</em> (the FBI definition: homicide, rape, robbery, and aggravated assault &mdash; simple assault is not included), and <em>burglary</em> (the &ldquo;Burglary&rdquo; category &mdash; unlawful entry of a building). Motor vehicle theft is not included in any group. Counts are incidents, not charges; a rare incident spanning two groups (e.g., burglary plus robbery) counts once in each. Note that SFPD&rsquo;s own CompStat dashboard reports somewhat lower totals for the same categories because it uses stricter federal (UCR) counting rules; trends match closely between the two.</dd>
+      <dt>Homelessness-related 311 requests</dt>
+      <dd>311 cases of type &ldquo;General Request&rdquo; routed to the Department of Homelessness &amp; Supportive Housing. No prior-year line on this chart: the city only began routing cases this way in mid-2025, so a year-over-year comparison would reflect the process change, not conditions on the street.</dd>
+      <dt>How officer-initiated &ldquo;suspicious person&rdquo; stops end</dt>
+      <dd>Each stop&rsquo;s outcome comes from the disposition code police record when closing the dispatch record. Column by column:
+        <ul style="margin:6px 0 0; padding-left:20px;">
+          <li><strong>Stops/mo</strong> &mdash; the average number of officer-initiated &ldquo;suspicious person&rdquo; stops per month during the period.</li>
+          <li><strong>Handled / advised</strong> &mdash; the stop ended on the scene with no formal action: the officer resolved the situation, gave a warning, or told the person to move along (codes HAN, ADV). No paperwork results.</li>
+          <li><strong>Arrest</strong> &mdash; the person was taken into custody (code ARR). The charge is not necessarily drug-related &mdash; warrants and other offenses are common.</li>
+          <li><strong>Citation</strong> &mdash; the person was issued a ticket/citation rather than arrested (code CIT).</li>
+          <li><strong>Report</strong> &mdash; the officer wrote a formal incident report, documenting something without an arrest or citation (code REP).</li>
+          <li><strong>Other</strong> &mdash; everything else: no disposition recorded, determined to have no merit, person gone before contact, unable to locate, etc.</li>
+        </ul>
+        Percentages are each outcome&rsquo;s share of that neighborhood&rsquo;s stops in the period. Public 911 calls are not included in this table &mdash; only stops officers initiated themselves. Per DataSF, disposition codes are informational and recorded in the field &mdash; arrest dispositions here will not exactly match official SFPD arrest statistics, so use this table for comparing patterns, not as official counts.</dd>
+      <dt>Drug overdose deaths — citywide (preliminary)</dt>
+      <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
+    </dl>
+    <p>The two &ldquo;&mdash; citywide&rdquo; charts show San Francisco totals for suspicious-person dispatches and homelessness-related 311 requests, using identical definitions to the neighborhood versions with no geographic filter. They answer whether the city&rsquo;s overall numbers are rising or falling, independent of any one neighborhood, and don&rsquo;t change with the selected tab.</p>
+    <p>&ldquo;Show as % of citywide&rdquo; re-draws each district chart as that district&rsquo;s share of the citywide total for the same period (e.g., the Southern district&rsquo;s drug offenses as a percentage of all SF drug offenses) &mdash; a scale-free way to see whether activity is concentrating in or leaving a neighborhood. In this mode the prior-year line and comparison dots become shares too, and stacked charts show the neighborhood&rsquo;s total share. The two citywide overdose charts are unaffected.</p>
+    <p>The circle and diamond dots on each neighborhood chart show the other two neighborhoods&rsquo; totals for the same period, for side-by-side comparison (also listed in each chart&rsquo;s tooltip and table). The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
+    <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a>, <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/law-enforcement-dispatched-calls-for-service" target="_blank" rel="noopener">dispatched calls explainer</a> (including &ldquo;on-view&rdquo; officer-initiated records and disposition codes), and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
+  </section>
+
+  <footer class="page">
+    <p><strong>Sources (SF Open Data portal):</strong>
+      <a href="https://data.sfgov.org/d/wg3w-h783" target="_blank" rel="noopener">Police Incident Reports</a> &middot;
+      <a href="https://data.sfgov.org/d/2zdj-bwza" target="_blank" rel="noopener">Dispatched Calls for Service</a> &middot;
+      <a href="https://data.sfgov.org/d/vw6y-z8j6" target="_blank" rel="noopener">311 Cases</a> &middot;
+      <a href="https://data.sfgov.org/d/jxrr-bmra" target="_blank" rel="noopener">Preliminary Unintentional Drug Overdose Deaths (citywide)</a>
+    </p>
+    <p>The tabs use SFPD <strong>Police District</strong> boundaries (&ldquo;Southern,&rdquo; &ldquo;Tenderloin,&rdquo; &ldquo;Mission&rdquo;) &mdash; the operational patrol districts, <em>not</em> the city&rsquo;s Analysis Neighborhoods. These are different geographies: for example, the Southern district covers South of Market plus part of the downtown/South Beach waterfront, and the Tenderloin district reaches south of Market Street. Totals here will therefore differ from the neighborhood-boundary dashboard. Overdose deaths are shown citywide only (the medical examiner reports deaths by ZIP, which does not map onto police districts). Police and 311 counts reflect reports/dispatches, not verified incidents, and recent days may still be loading into the city portal. Overdose death counts are preliminary medical-examiner determinations and are revised.</p>
+    <p>Charts refresh with the latest city data every time this page is opened. Police, dispatch, and 311 data update daily (typically through yesterday); citywide overdose deaths update monthly.</p>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+  var START = "2026-01-01";
+  var PRIOR_START = "2025-01-01";  // fetch one extra year for the year-over-year line
+  var PRIOR_LABEL = "Same period 2025";
+  var SODA = "https://data.sfgov.org/resource/";
+
+  /* ---------- date helpers (all on YYYY-MM-DD strings, UTC-anchored) ---------- */
+  function d2s(d) { return d.toISOString().slice(0, 10); }
+  function s2d(s) { return new Date(s + "T00:00:00Z"); }
+  function today() {
+    var n = new Date();
+    return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0");
+  }
+  function addDays(s, n) { var d = s2d(s); d.setUTCDate(d.getUTCDate() + n); return d2s(d); }
+  function weekStart(s) { var d = s2d(s); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d2s(d); } // Sunday
+  function monthStart(s) { return s.slice(0, 8) + "01"; }
+  function nextMonth(s) {
+    var y = +s.slice(0, 4), m = +s.slice(5, 7);
+    m += 1; if (m > 12) { m = 1; y += 1; }
+    return y + "-" + String(m).padStart(2, "0") + "-01";
+  }
+  var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  function fmtDay(s) { return MONTHS[+s.slice(5, 7) - 1] + " " + (+s.slice(8, 10)); }
+  function fmtMonth(s) { return MONTHS[+s.slice(5, 7) - 1] + " " + s.slice(0, 4); }
+  function fmtN(n) { return n.toLocaleString("en-US"); }
+
+  /* ---------- bucket construction ---------- */
+  // Buckets from Jan 1 2026 through `through` (a day string). gran: 'weekly'|'monthly'
+  function makeBuckets(gran, through) {
+    var out = [], cur, end, tw = today();
+    if (gran === "weekly") {
+      cur = weekStart(START);
+      while (cur <= through) {
+        end = addDays(cur, 6);
+        out.push({
+          start: cur, endEx: addDays(cur, 7),
+          label: "Week of " + fmtDay(cur) + (cur.slice(0,4) !== "2026" ? ", " + cur.slice(0,4) : ""),
+          short: fmtDay(cur),
+          partial: (cur < START) || (end >= tw)
+        });
+        cur = addDays(cur, 7);
+      }
+    } else {
+      cur = monthStart(START);
+      while (cur <= through) {
+        var nm = nextMonth(cur);
+        out.push({
+          start: cur, endEx: nm,
+          label: fmtMonth(cur), short: MONTHS[+cur.slice(5, 7) - 1],
+          partial: addDays(nm, -1) >= tw
+        });
+        cur = nm;
+      }
+    }
+    return out;
+  }
+  function aggregate(dailyMap, buckets) {
+    return buckets.map(function (b) {
+      var sum = 0;
+      dailyMap.forEach(function (n, day) {
+        if (day >= b.start && day < b.endEx && day >= START) sum += n;
+      });
+      return sum;
+    });
+  }
+
+  /* ---------- fetch ---------- */
+  function soql(dataset, params) {
+    var q = Object.keys(params).map(function (k) {
+      return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+    }).join("&");
+    return fetch(SODA + dataset + ".json?" + q).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status + " from " + dataset);
+      return r.json();
+    });
+  }
+
+  // Police districts. Casing differs by dataset: incidents (wg3w-h783) use
+  // Title case ("Southern"); dispatch (2zdj-bwza) and 311 (vw6y-z8j6) use
+  // UPPERCASE ("SOUTHERN"). name is Title case; loaders upper-case where needed.
+  var HOODS = [
+    { name: "Southern",   short: "Southern" },
+    { name: "Tenderloin", short: "Tenderloin" },
+    { name: "Mission",    short: "Mission" }
+  ];
+
+  var state = {
+    gran: "weekly",
+    compare: true,
+    pctMode: false,  // show charts as % of citywide instead of counts
+    city: null,      // citywide daily series (2025+2026) for % mode
+    hood: "Southern",
+    hoods: {},       // neighborhood -> {daily, prior, through, errors, loaded}
+    prior: {},       // citywide prior-year data (EMS weeks, death months)
+    through: {},     // citywide: ems/deaths data recency
+    ems: [],         // [{week, n}]
+    deaths: [],      // [{month, n}]
+    errors: {}       // citywide fetch errors
+  };
+  function ensureHood(name) {
+    if (!state.hoods[name]) {
+      state.hoods[name] = { daily: {}, prior: {}, through: {}, errors: {}, loaded: false };
+    }
+    return state.hoods[name];
+  }
+  function cur() { return ensureHood(state.hood); }
+  function curShort() {
+    for (var i = 0; i < HOODS.length; i++) if (HOODS[i].name === state.hood) return HOODS[i].short;
+    return state.hood;
+  }
+
+  function loadPolice(hood, H) {
+    // drugs = every incident whose SUBcategory is "Drug Violation", regardless of
+    // parent category (they occur under Drug Offense, Drug Violation, and
+    // Disorderly Conduct). violent = FBI definition: homicide, rape, robbery,
+    // and aggravated (not simple) assault. Counts use count(distinct incident_id)
+    // so an incident with multiple charges filed is counted once, matching how
+    // SFPD reports incidents (the raw dataset has one row per charge).
+    var whereBase = "incident_date>='" + PRIOR_START + "' AND police_district='" + hood + "'";  // incidents use Title case
+    var pDrugs = soql("wg3w-h783", {
+      "$select": "incident_date, count(distinct incident_id) as n",
+      "$where": whereBase + " AND incident_subcategory='Drug Violation'",
+      "$group": "incident_date", "$limit": "20000"
+    });
+    var pCrime = soql("wg3w-h783", {
+      "$select": "incident_date, incident_category, count(distinct incident_id) as n",
+      "$where": whereBase + " AND (incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
+        " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
+      "$group": "incident_date, incident_category", "$limit": "40000"
+    });
+    return Promise.all([pDrugs, pCrime]).then(function (res) {
+      ["drugs", "larceny", "violent", "burglary"].forEach(function (k) { H.daily[k] = new Map(); });
+      H.prior.drugs = new Map();
+      H.prior.crime = new Map();  // prior-year total of larceny + violent + burglary
+      var maxDay = null;
+      res[0].forEach(function (r) {
+        var day = String(r.incident_date).slice(0, 10);
+        var n = +r.n;
+        if (day >= START) {
+          if (!maxDay || day > maxDay) maxDay = day;
+          H.daily.drugs.set(day, (H.daily.drugs.get(day) || 0) + n);
+        } else {
+          H.prior.drugs.set(day, (H.prior.drugs.get(day) || 0) + n);
+        }
+      });
+      res[1].forEach(function (r) {
+        var day = String(r.incident_date).slice(0, 10);
+        var n = +r.n;
+        var k = r.incident_category === "Larceny Theft" ? "larceny"
+              : r.incident_category === "Burglary" ? "burglary"
+              : "violent";
+        if (day >= START) {
+          if (!maxDay || day > maxDay) maxDay = day;
+          H.daily[k].set(day, (H.daily[k].get(day) || 0) + n);
+        } else {
+          H.prior.crime.set(day, (H.prior.crime.get(day) || 0) + n);
+        }
+      });
+      H.through.police = maxDay;
+    });
+  }
+
+  function loadThreeOneOne(hood, H) {
+    return soql("vw6y-z8j6", {
+      "$select": "date_trunc_ymd(requested_datetime) as d, count(*) as n",
+      "$where": "requested_datetime>='" + START + "' AND police_district='" + hood.toUpperCase() + "'" +
+        " AND service_name='General Request' AND service_subtype='homelessness_and_supportive_housing'",
+      "$group": "d",
+      "$limit": "20000"
+    }).then(function (rows) {
+      H.daily.homeless = new Map();
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        H.daily.homeless.set(day, (H.daily.homeless.get(day) || 0) + (+r.n));
+      });
+      H.through.t311 = maxDay;
+    });
+  }
+
+  function loadHood(name) {
+    var H = ensureHood(name);
+    if (H.loaded) return Promise.resolve();
+    if (H.loading) return H.loading;
+    H.loading = Promise.allSettled([
+      loadPolice(name, H).catch(function (e) { H.errors.police = e.message; }),
+      loadCalls(name, H).catch(function (e) { H.errors.calls = e.message; }),
+      loadThreeOneOne(name, H).catch(function (e) { H.errors.t311 = e.message; })
+    ]).then(function () { H.loaded = true; H.loading = null; });
+    return H.loading;
+  }
+
+  function loadCalls(hood, H) {
+    // Dispatched records with final call type SUSPICIOUS PERSON, excluding those
+    // cancelled by dispatch (CAN), no-merit (22), or duplicates (DUP). Split by
+    // who initiated: onview_flag N = a 911 call from the public; Y/HSOC = an
+    // officer or city street team generated the record themselves ("on view").
+    return soql("2zdj-bwza", {
+      "$select": "date_trunc_ymd(received_datetime) as d, onview_flag, count(*) as n",
+      "$where": "received_datetime>='" + PRIOR_START + "' AND police_district='" + hood.toUpperCase() + "'" +
+        " AND call_type_final_desc='SUSPICIOUS PERSON'" +
+        " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
+      "$group": "d, onview_flag",
+      "$limit": "20000"
+    }).then(function (rows) {
+      H.daily.suspCallsPublic = new Map();
+      H.daily.suspCallsOfficer = new Map();
+      H.prior.suspCalls = new Map();        // prior-year total
+      H.prior.suspCallsPublic = new Map();  // prior-year public 911 calls only
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        var n = +r.n;
+        if (day < START) {
+          H.prior.suspCalls.set(day, (H.prior.suspCalls.get(day) || 0) + n);
+          if (r.onview_flag === "N") {
+            H.prior.suspCallsPublic.set(day, (H.prior.suspCallsPublic.get(day) || 0) + n);
+          }
+        } else {
+          if (!maxDay || day > maxDay) maxDay = day;
+          var m = r.onview_flag === "N" ? H.daily.suspCallsPublic : H.daily.suspCallsOfficer;
+          m.set(day, (m.get(day) || 0) + n);
+        }
+      });
+      H.through.calls = maxDay;
+    });
+  }
+
+  function loadCity() {
+    // citywide daily totals (2025 + 2026) per metric, for the %-of-citywide mode
+    var daily = { drugs: new Map(), crime: new Map(), suspCalls: new Map(), homeless: new Map() };
+    var through = {};
+    function add(map, day, n) { map.set(day, (map.get(day) || 0) + n); }
+    var pPoliceDrugs = soql("wg3w-h783", {
+      "$select": "incident_date, count(distinct incident_id) as n",
+      "$where": "incident_date>='" + PRIOR_START + "' AND incident_subcategory='Drug Violation'",
+      "$group": "incident_date", "$limit": "20000"
+    }).then(function (rows) {
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.incident_date).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        add(daily.drugs, day, +r.n);
+      });
+      through.police = maxDay;
+    });
+    var pPoliceCrime = soql("wg3w-h783", {
+      "$select": "incident_date, incident_category, count(distinct incident_id) as n",
+      "$where": "incident_date>='" + PRIOR_START + "' AND (incident_category in('Larceny Theft','Burglary','Robbery','Homicide','Rape')" +
+        " OR (incident_category='Assault' AND incident_subcategory='Aggravated Assault'))",
+      "$group": "incident_date, incident_category", "$limit": "40000"
+    }).then(function (rows) {
+      rows.forEach(function (r) {
+        add(daily.crime, String(r.incident_date).slice(0, 10), +r.n);
+      });
+    });
+    var C = ensureHood("__city__");  // pseudo-neighborhood powering the citywide charts
+    var pCalls = soql("2zdj-bwza", {
+      "$select": "date_trunc_ymd(received_datetime) as d, onview_flag as f, count(*) as n",
+      "$where": "received_datetime>='" + PRIOR_START + "'" +
+        " AND call_type_final_desc='SUSPICIOUS PERSON'" +
+        " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
+      "$group": "d, f", "$limit": "20000"
+    }).then(function (rows) {
+      C.daily.suspCallsPublic = new Map();
+      C.daily.suspCallsOfficer = new Map();
+      C.prior.suspCalls = new Map();
+      C.prior.suspCallsPublic = new Map();
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        var n = +r.n;
+        add(daily.suspCalls, day, n);
+        if (day < START) {
+          add(C.prior.suspCalls, day, n);
+          if (r.f === "N") add(C.prior.suspCallsPublic, day, n);
+        } else {
+          if (!maxDay || day > maxDay) maxDay = day;
+          add(r.f === "N" ? C.daily.suspCallsPublic : C.daily.suspCallsOfficer, day, n);
+        }
+      });
+      through.calls = maxDay;
+      C.through.calls = maxDay;
+    });
+    var p311 = soql("vw6y-z8j6", {
+      "$select": "date_trunc_ymd(requested_datetime) as d, count(*) as n",
+      "$where": "requested_datetime>='" + START + "'" +
+        " AND service_name='General Request' AND service_subtype='homelessness_and_supportive_housing'",
+      "$group": "d", "$limit": "20000"
+    }).then(function (rows) {
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        if (!maxDay || day > maxDay) maxDay = day;
+        add(daily.homeless, day, +r.n);
+      });
+      through.t311 = maxDay;
+      C.daily.homeless = daily.homeless;
+      C.through.t311 = maxDay;
+    });
+    return Promise.all([pPoliceDrugs, pPoliceCrime, pCalls, p311]).then(function () {
+      state.city = { daily: daily, through: through };
+      C.loaded = true;
+    });
+  }
+
+  function loadDispo() {
+    // outcome mix of officer-initiated suspicious-person stops in all three
+    // neighborhoods, split at the RESET Center opening date
+    var base = "police_district in('SOUTHERN','TENDERLOIN','MISSION')" +
+      " AND call_type_final_desc='SUSPICIOUS PERSON' AND onview_flag!='N'" +
+      " AND (disposition not in('CAN','22','DUP') OR disposition is null)";
+    function q(where) {
+      return soql("2zdj-bwza", {
+        "$select": "police_district as h, disposition as d, count(*) as n",
+        "$where": where, "$group": "h, d", "$limit": "500"
+      });
+    }
+    function shape(rows) {
+      var out = {};
+      rows.forEach(function (r) {
+        var b = (r.d === "HAN" || r.d === "ADV") ? "handled" : r.d === "ARR" ? "arrest"
+              : r.d === "CIT" ? "citation" : r.d === "REP" ? "report" : "other";
+        out[r.h] = out[r.h] || {};
+        out[r.h][b] = (out[r.h][b] || 0) + (+r.n);
+      });
+      return out;
+    }
+    return Promise.all([
+      q("received_datetime>='" + START + "' AND received_datetime<'" + EVENT.date + "' AND " + base),
+      q("received_datetime>='" + EVENT.date + "' AND " + base),
+      soql("2zdj-bwza", { "$select": "max(received_datetime) as mx", "$where": base })
+    ]).then(function (res) {
+      state.dispo = {
+        before: shape(res[0]), after: shape(res[1]),
+        through: String(res[2][0].mx).slice(0, 10)
+      };
+    });
+  }
+
+  function loadEms() {
+    return soql("ed3a-sn39", {
+      "$select": "week_start_date, total_overdose_related_911_calls",
+      "$where": "week_start_date>='" + addDays(weekStart(START), -364) + "'",
+      "$order": "week_start_date",
+      "$limit": "500"
+    }).then(function (rows) {
+      state.ems = [];
+      state.prior.emsWeeks = new Map();
+      var cutoff = weekStart(START);
+      rows.forEach(function (r) {
+        var week = String(r.week_start_date).slice(0, 10);
+        var n = Math.round(+r.total_overdose_related_911_calls);
+        if (week >= cutoff) state.ems.push({ week: week, n: n });
+        else state.prior.emsWeeks.set(week, n);
+      });
+      if (state.ems.length) state.through.ems = addDays(state.ems[state.ems.length - 1].week, 6);
+    });
+  }
+
+  function loadDeaths() {
+    return soql("jxrr-bmra", {
+      "$select": "month_start_date, total_deaths",
+      "$where": "month_start_date>='" + PRIOR_START + "'",
+      "$order": "month_start_date",
+      "$limit": "100"
+    }).then(function (rows) {
+      state.deaths = [];
+      state.prior.deathMonths = new Map();
+      rows.forEach(function (r) {
+        var month = String(r.month_start_date).slice(0, 10);
+        var n = Math.round(+r.total_deaths);
+        if (month >= START) state.deaths.push({ month: month, n: n });
+        else state.prior.deathMonths.set(month, n);
+      });
+      if (state.deaths.length) state.through.deaths = state.deaths[state.deaths.length - 1].month;
+    });
+  }
+
+  /* ---------- chart config ---------- */
+  var CHARTS = [
+    { id: "suspcalls", kind: "stack", geo: "SoMa", cityKey: "suspCalls",
+      priorKey: "suspCalls", priorName: "Total · same period 2025",
+      priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
+      title: "“Suspicious person” calls & stops",
+      sub: "Dispatched records · excludes cancelled/duplicates (CAN/22/DUP)", src: "calls",
+      series: [
+        { key: "suspCallsPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
+        { key: "suspCallsOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
+      ] },
+    { id: "drugs",    kind: "daily", key: "drugs",    color: "var(--s-soma)", geo: "SoMa", priorKey: "drugs", cityKey: "drugs",
+      title: "Drug offenses", sub: "SFPD incident reports · all “Drug Violation” incidents (see definitions below)", src: "police" },
+    { id: "homeless", kind: "daily", key: "homeless", color: "var(--s-soma)", geo: "SoMa", cityKey: "homeless",
+      title: "Homelessness-related 311 requests", sub: "311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
+    { id: "crime",    kind: "stack", geo: "SoMa", src: "police", cityKey: "crime",
+      priorKey: "crime", priorName: "Total · same period 2025",
+      title: "Larceny, violent crime & burglary",
+      sub: "SFPD incident reports · violent crime = homicide, rape, robbery, aggravated assault",
+      series: [
+        { key: "larceny",  name: "Larceny theft", color: "var(--s-soma)" },
+        { key: "violent",  name: "Violent crime", color: "var(--s-soma2)" },
+        { key: "burglary", name: "Burglary",      color: "var(--s-soma3)" }
+      ] },
+    { id: "dispo",    kind: "dispo", geo: "SoMa · Tenderloin · Mission",
+      title: "How officer-initiated “suspicious person” stops end",
+      sub: "Share of stop outcomes by neighborhood, before vs. since the RESET Center opening", src: "dispo" },
+    { id: "suspcity", kind: "stack", geo: "Citywide", hoodOverride: "__city__",
+      priorKey: "suspCalls", priorName: "Total · same period 2025",
+      priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
+      title: "“Suspicious person” calls & stops — citywide",
+      sub: "All of San Francisco · same definitions as the neighborhood chart above", src: "calls",
+      series: [
+        { key: "suspCallsPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
+        { key: "suspCallsOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
+      ] },
+    { id: "homelesscity", kind: "daily", key: "homeless", color: "var(--s-city)", geo: "Citywide", hoodOverride: "__city__",
+      title: "Homelessness-related 311 requests — citywide",
+      sub: "All of San Francisco · 311 cases routed to Dept. of Homelessness & Supportive Housing", src: "t311" },
+    { id: "deaths",   kind: "deaths", color: "var(--s-city)", geo: "Citywide",
+      title: "Drug overdose deaths — citywide (preliminary)", sub: "Chief Medical Examiner · citywide · always monthly", src: "deaths" }
+  ];
+  // (The neighborhood-level overdose-deaths chart from the neighborhood dashboard
+  // is omitted here: the medical examiner reports deaths by ZIP, which does not
+  // map onto police-district boundaries. Citywide overdose deaths are shown below.)
+
+  /* ---------- year-over-year helpers ---------- */
+  function yearShift(s) { return (+s.slice(0, 4) - 1) + s.slice(4); }
+  function sumRange(map, a, b) {
+    var t = 0;
+    map.forEach(function (n, d) { if (d >= a && d < b) t += n; });
+    return t;
+  }
+  // prior-year count for a bucket: weekly buckets shift 364 days (same weekday),
+  // monthly buckets shift one calendar year; partial buckets compare only the
+  // elapsed portion so the line stays apples-to-apples
+  function priorDaily(map, b, gran) {
+    var s0 = b.start < START ? START : b.start;
+    var e0 = b.endEx;
+    if (b.partial) {
+      var t = addDays(today(), 1);
+      if (t < e0) e0 = t;
+    }
+    return gran === "weekly"
+      ? sumRange(map, addDays(s0, -364), addDays(e0, -364))
+      : sumRange(map, yearShift(s0), yearShift(e0));
+  }
+
+  /* ---------- series extraction per chart, honoring granularity ---------- */
+  function seriesFor(cfg, gran) {
+    // returns {buckets:[{label, short, partial}], values:[n], through, note}
+    if (cfg.kind === "daily" || cfg.kind === "stack") {
+      var H = cfg.hoodOverride ? ensureHood(cfg.hoodOverride) : cur();
+      var through = H.through[cfg.src];
+      if (!through) return null;
+      var buckets = makeBuckets(gran, through);
+      // drop trailing buckets that start after data ends
+      buckets = buckets.filter(function (b) { return b.start <= through; });
+      var pmap = cfg.priorKey && H.prior[cfg.priorKey];
+      var prior = pmap ? buckets.map(function (b) { return priorDaily(pmap, b, gran); }) : null;
+      var pct = !!(state.pctMode && cfg.cityKey && state.city && state.city.daily[cfg.cityKey]);
+      var cityCur = null, cityThru = null;
+      if (pct) {
+        cityThru = state.city.through[cfg.src];
+        cityCur = aggregate(state.city.daily[cfg.cityKey], buckets).map(function (c, i) {
+          return (c > 0 && cityThru && buckets[i].start <= cityThru) ? c : null;
+        });
+        if (prior) {
+          var cmap = state.city.daily[cfg.cityKey], priorCounts = prior;
+          prior = buckets.map(function (b, i) {
+            if (priorCounts[i] === null) return null;
+            var cp = priorDaily(cmap, b, gran);
+            return cp > 0 ? Math.round(priorCounts[i] / cp * 1000) / 10 : null;
+          });
+        }
+      }
+      function share(v, c) {
+        return (v === null || c === null || c === undefined) ? null : Math.round(v / c * 1000) / 10;
+      }
+      var pmap2 = cfg.priorKey2 && H.prior[cfg.priorKey2];
+      var prior2 = (pmap2 && !pct) ? {
+        name: cfg.prior2Name, color: cfg.prior2Color,
+        values: buckets.map(function (b) { return priorDaily(pmap2, b, gran); })
+      } : null;
+      // comparison dots: the other two neighborhoods' totals per bucket
+      var others = (!state.compare || cfg.hoodOverride) ? [] : HOODS.filter(function (h) { return h.name !== state.hood; })
+        .map(function (h, idx) {
+          var H2 = state.hoods[h.name];
+          if (!H2 || !H2.loaded) return null;
+          var vals;
+          if (cfg.kind === "daily") {
+            if (!H2.daily[cfg.key]) return null;
+            vals = aggregate(H2.daily[cfg.key], buckets);
+          } else {
+            if (cfg.series.some(function (sd) { return !H2.daily[sd.key]; })) return null;
+            var per = cfg.series.map(function (sd) { return aggregate(H2.daily[sd.key], buckets); });
+            vals = buckets.map(function (_, i) {
+              return per.reduce(function (a, p) { return a + p[i]; }, 0);
+            });
+          }
+          var thru2 = H2.through[cfg.src];
+          vals = vals.map(function (v, i) { return (thru2 && buckets[i].start <= thru2) ? v : null; });
+          if (pct) vals = vals.map(function (v, i) { return share(v, cityCur[i]); });
+          return {
+            name: h.short,
+            color: idx === 0 ? "var(--dot-a)" : "var(--dot-b)",
+            shape: idx === 0 ? "circle" : "diamond",
+            values: vals
+          };
+        }).filter(Boolean);
+      if (!others.length) others = null;
+      if (cfg.kind === "daily") {
+        if (!H.daily[cfg.key]) return null;
+        var dvals = aggregate(H.daily[cfg.key], buckets);
+        if (pct) dvals = dvals.map(function (v, i) { return share(v, cityCur[i]); });
+        return { buckets: buckets, values: dvals, through: through, prior: prior, prior2: prior2, others: others, pct: pct };
+      }
+      if (cfg.series.some(function (sd) { return !H.daily[sd.key]; })) return null;
+      var series = cfg.series.map(function (sd) {
+        return { name: sd.name, color: sd.color, values: aggregate(H.daily[sd.key], buckets) };
+      });
+      var totals = buckets.map(function (_, i) {
+        return series.reduce(function (a, sr) { return a + sr.values[i]; }, 0);
+      });
+      if (pct) {
+        // in % mode the stack collapses to one bar: this neighborhood's share
+        // of the citywide total
+        return {
+          buckets: buckets, series: null, through: through, prior: prior, prior2: null,
+          others: others, pct: true,
+          values: totals.map(function (v, i) { return share(v, cityCur[i]); })
+        };
+      }
+      return {
+        buckets: buckets, series: series, through: through, prior: prior, prior2: prior2, others: others,
+        values: totals
+      };
+    }
+    if (cfg.kind === "ems") {
+      if (!state.ems.length) return null;
+      if (gran === "weekly") {
+        return {
+          buckets: state.ems.map(function (r) {
+            return { start: r.week, endEx: addDays(r.week, 7), label: "Week of " + fmtDay(r.week) + (r.week.slice(0,4) !== "2026" ? ", " + r.week.slice(0,4) : ""), short: fmtDay(r.week), partial: r.week < START };
+          }),
+          values: state.ems.map(function (r) { return r.n; }),
+          through: state.through.ems,
+          prior: state.ems.map(function (r) {
+            var p = state.prior.emsWeeks.get(addDays(r.week, -364));
+            return p === undefined ? null : p;
+          })
+        };
+      }
+      var byMonth = new Map(), priorByMonth = new Map();
+      state.ems.forEach(function (r) {
+        if (r.week < START) return;
+        var m = monthStart(r.week);
+        byMonth.set(m, (byMonth.get(m) || 0) + r.n);
+      });
+      state.prior.emsWeeks.forEach(function (n, week) {
+        if (week < PRIOR_START) return;
+        var m = monthStart(week);
+        priorByMonth.set(m, (priorByMonth.get(m) || 0) + n);
+      });
+      var months = Array.from(byMonth.keys()).sort();
+      var lastEnd = state.through.ems;
+      return {
+        buckets: months.map(function (m) {
+          return { start: m, endEx: nextMonth(m), label: fmtMonth(m), short: MONTHS[+m.slice(5,7)-1], partial: addDays(nextMonth(m), -1) > lastEnd };
+        }),
+        values: months.map(function (m) { return byMonth.get(m); }),
+        through: state.through.ems,
+        note: "weeks grouped by start date",
+        prior: months.map(function (m) {
+          var p = priorByMonth.get(yearShift(m));
+          return p === undefined ? null : p;
+        })
+      };
+    }
+    if (cfg.kind === "deaths") {
+      if (!state.deaths.length) return null;
+      return {
+        buckets: state.deaths.map(function (r) {
+          return { start: r.month, endEx: nextMonth(r.month), label: fmtMonth(r.month), short: MONTHS[+r.month.slice(5,7)-1], partial: false };
+        }),
+        values: state.deaths.map(function (r) { return r.n; }),
+        through: state.through.deaths,
+        monthlyOnly: true,
+        prior: state.deaths.map(function (r) {
+          var p = state.prior.deathMonths.get(yearShift(r.month));
+          return p === undefined ? null : p;
+        })
+      };
+    }
+    return null;
+  }
+
+  /* ---------- SVG column chart ---------- */
+  var NS = "http://www.w3.org/2000/svg";
+  function el(name, attrs, parent) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function niceTicks(max) {
+    if (max <= 0) return [0, 1];
+    var raw = max / 3.5, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var step = [1, 2, 5, 10].map(function (s) { return s * mag; })
+      .find(function (s) { return s >= raw; }) || 10 * mag;
+    var ticks = [];
+    for (var v = 0; v <= max + 1e-9; v += step) ticks.push(Math.round(v * 100) / 100);
+    if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+    return ticks;
+  }
+  function barPath(x, y0, w, h, r) {
+    if (h <= 0) return "";
+    r = Math.min(r, w / 2, h);
+    return "M" + x + " " + y0 +
+      " V" + (y0 - h + r) +
+      " a" + r + " " + r + " 0 0 1 " + r + " " + (-r) +
+      " h" + (w - 2 * r) +
+      " a" + r + " " + r + " 0 0 1 " + r + " " + r +
+      " V" + y0 + " Z";
+  }
+
+  var EVENT = { date: "2026-05-04", label: "RESET Center opened · May 4" };
+
+  var tooltip = document.getElementById("tooltip");
+  function showTip(anchorRect, period, value, note, rows) {
+    tooltip.replaceChildren();
+    var p = document.createElement("div"); p.className = "tt-period"; p.textContent = period;
+    var v = document.createElement("div"); v.className = "tt-value";
+    v.textContent = typeof value === "number" ? fmtN(value) : value;
+    tooltip.appendChild(p); tooltip.appendChild(v);
+    (rows || []).forEach(function (r) {
+      var row = document.createElement("div"); row.className = "tt-row";
+      var key = document.createElement("span"); key.className = "tt-key" + (r.shape ? " " + r.shape : "");
+      key.style.background = r.dash
+        ? "repeating-linear-gradient(90deg, " + r.color + " 0, " + r.color + " 3px, transparent 3px, transparent 5px)"
+        : r.color;
+      var val = document.createElement("strong");
+      val.textContent = typeof r.val === "number" ? fmtN(r.val) : r.val;
+      var name = document.createElement("span"); name.className = "tt-name"; name.textContent = r.name;
+      row.appendChild(key); row.appendChild(val); row.appendChild(name);
+      tooltip.appendChild(row);
+    });
+    if (note) { var nn = document.createElement("div"); nn.className = "tt-note"; nn.textContent = note; tooltip.appendChild(nn); }
+    tooltip.style.display = "block";
+    var tw = tooltip.offsetWidth, thh = tooltip.offsetHeight;
+    var x = anchorRect.left + anchorRect.width / 2 - tw / 2 + window.scrollX;
+    x = Math.max(6, Math.min(x, window.scrollX + document.documentElement.clientWidth - tw - 6));
+    var y = anchorRect.top + window.scrollY - thh - 8;
+    if (y < window.scrollY + 4) y = anchorRect.bottom + window.scrollY + 8;
+    tooltip.style.left = x + "px"; tooltip.style.top = y + "px";
+  }
+  function hideTip() { tooltip.style.display = "none"; }
+
+  function renderChart(container, cfg, s) {
+    var W = 560, H = 232, mL = 40, mR = 10, mT = 20, mB = 26;
+    var plotW = W - mL - mR, plotH = H - mT - mB;
+    var n = s.values.length;
+    var fmtV = function (v) {
+      return (v === null || v === undefined) ? "—" : (s.pct ? fmtN(v) + "%" : fmtN(v));
+    };
+    var barColor = cfg.color || "var(--s-soma)";
+    var maxV = Math.max.apply(null, s.values.filter(function (v) { return v !== null; })
+      .concat(s.prior ? s.prior.filter(function (p) { return p !== null; }) : [])
+      .concat(s.prior2 ? s.prior2.values.filter(function (p) { return p !== null; }) : [])
+      .concat(s.others ? s.others.reduce(function (a, o) {
+        return a.concat(o.values.filter(function (p) { return p !== null; }));
+      }, []) : [])
+      .concat([1]));
+    var ticks = niceTicks(maxV);
+    var yMax = ticks[ticks.length - 1];
+    function Y(v) { return mT + plotH - (v / yMax) * plotH; }
+
+    var svg = el("svg", { viewBox: "0 0 " + W + " " + H, role: "img" });
+    var latestIdx = n - 1;
+    svg.setAttribute("aria-label", cfg.title + ", " + (s.monthlyOnly ? "monthly" : state.gran) + " counts. " +
+      "Latest " + s.buckets[latestIdx].label + ": " + fmtN(s.values[latestIdx]) + ". Use the table button for all values.");
+
+    ticks.forEach(function (t) {
+      var y = Y(t);
+      if (t > 0) el("line", { x1: mL, x2: W - mR, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      el("text", { x: mL - 6, y: y + 3.5, "text-anchor": "end", "font-size": 10.5, fill: "var(--text-muted)", style: "font-variant-numeric: tabular-nums" }, svg)
+        .textContent = s.pct ? fmtN(t) + "%" : fmtN(t);
+    });
+    el("line", { x1: mL, x2: W - mR, y1: Y(0), y2: Y(0), stroke: "var(--baseline)", "stroke-width": 1 }, svg);
+
+    var band = plotW / n;
+    var barW = Math.min(24, Math.max(3, band - 2));
+    var maxIdx = s.values.indexOf(Math.max.apply(null, s.values));
+
+    // x labels: monthly -> all; weekly -> first bucket of each month, min 3 bands apart
+    var lastMonth = "", lastLabeled = -10;
+    s.buckets.forEach(function (b, i) {
+      var show, txt;
+      if (n <= 13) { show = true; txt = b.short; }
+      else {
+        var m = b.short.split(" ")[0];
+        txt = m;
+        show = m !== lastMonth && (i - lastLabeled >= 3);
+        lastMonth = m;
+        if (show) lastLabeled = i;
+      }
+      if (show) {
+        el("text", { x: mL + band * i + band / 2, y: H - 8, "text-anchor": "middle", "font-size": 10.5, fill: "var(--text-muted)" }, svg)
+          .textContent = txt;
+      }
+    });
+
+    s.values.forEach(function (v, i) {
+      var x = mL + band * i + (band - barW) / 2;
+      var partial = s.buckets[i].partial;
+      var segs = [], topY = Y(0), rows = null;
+
+      if (s.series) {
+        // stacked: series[0] grows from the baseline, 2px surface gap between
+        // segments; only the topmost non-zero segment gets the rounded cap
+        var heights = s.series.map(function (sr) { return (sr.values[i] / yMax) * plotH; });
+        var lastNZ = -1;
+        heights.forEach(function (h, k) { if (h > 0) lastNZ = k; });
+        var yCur = Y(0);
+        heights.forEach(function (h, k) {
+          if (h <= 0) return;
+          var seg = (k === lastNZ)
+            ? el("path", { d: barPath(x, yCur, barW, h, 4), fill: s.series[k].color, class: "bar", "fill-opacity": partial ? 0.45 : 1 })
+            : el("rect", { x: x, y: yCur - h, width: barW, height: h, fill: s.series[k].color, class: "bar", "fill-opacity": partial ? 0.45 : 1 });
+          segs.push(seg);
+          yCur -= h + 2;
+        });
+        topY = yCur + 2;
+        rows = s.series.map(function (sr) { return { name: sr.name, color: sr.color, val: sr.values[i] }; });
+      } else if (v !== null) {
+        var h1 = (v / yMax) * plotH;
+        segs.push(el("path", { d: barPath(x, Y(0), barW, h1, 4), fill: barColor, class: "bar", "fill-opacity": partial ? 0.45 : 1 }));
+        topY = Y(0) - h1;
+      }
+
+      var aria = s.buckets[i].label + ": " + fmtV(v) +
+        (s.series ? " total — " + rows.map(function (r) { return fmtV(r.val) + " " + r.name; }).join(", ") : "");
+      var extraRows = [];
+      if (s.prior && s.prior[i] !== null) {
+        extraRows.push({ name: cfg.priorName || PRIOR_LABEL, color: "var(--text-muted)", val: s.prior[i] });
+        aria += "; " + (cfg.priorName || PRIOR_LABEL).toLowerCase() + ": " + fmtV(s.prior[i]);
+      }
+      if (s.prior2 && s.prior2.values[i] !== null) {
+        extraRows.push({ name: s.prior2.name, color: s.prior2.color, dash: true, val: s.prior2.values[i] });
+        aria += "; " + s.prior2.name.toLowerCase() + ": " + fmtV(s.prior2.values[i]);
+      }
+      (s.others || []).forEach(function (o) {
+        if (o.values[i] === null) return;
+        extraRows.push({ name: o.name, color: o.color, shape: o.shape, val: o.values[i] });
+        aria += "; " + o.name + ": " + fmtV(o.values[i]);
+      });
+      if (extraRows.length) rows = (rows || []).concat(extraRows);
+      aria += partial ? " (partial period)" : "";
+      var hit = el("rect", {
+        x: mL + band * i, y: mT, width: band, height: plotH + mB - 4,
+        class: "hit", tabindex: 0, role: "img", "aria-label": aria
+      });
+      svg.appendChild(hit);
+      segs.forEach(function (sg) { svg.appendChild(sg); });
+      function on() {
+        segs.forEach(function (sg) { sg.classList.add("hot"); });
+        showTip(hit.getBoundingClientRect(), s.buckets[i].label, fmtV(v),
+          partial ? "Partial period — still accumulating" : null,
+          rows ? rows.map(function (r) { return Object.assign({}, r, { val: fmtV(r.val) }); }) : null);
+      }
+      function off() { segs.forEach(function (sg) { sg.classList.remove("hot"); }); hideTip(); }
+      hit.addEventListener("pointerenter", on);
+      hit.addEventListener("pointerleave", off);
+      hit.addEventListener("focus", on);
+      hit.addEventListener("blur", off);
+
+      // selective direct labels: peak + latest complete-ish value (skip collisions/zero)
+      var isLabel = (i === maxIdx && v > 0) || (i === latestIdx && i !== maxIdx && v > 0 && n > 2);
+      if (isLabel && v > 0) {
+        el("text", { x: x + barW / 2, y: topY - 5, "text-anchor": "middle", "font-size": 10.5, "font-weight": 600, fill: "var(--text-secondary)" }, svg)
+          .textContent = fmtV(v);
+      }
+    });
+
+    // prior-year step lines: one horizontal segment per bucket at last year's value
+    function drawStepLine(vals, stroke, dash) {
+      if (!vals || !vals.some(function (p) { return p !== null; })) return;
+      var d = "", pen = false;
+      vals.forEach(function (p, i) {
+        if (p === null) { pen = false; return; }
+        var y = Y(p), x0 = mL + band * i, x1 = mL + band * (i + 1);
+        d += pen ? "V" + y + "H" + x1 : "M" + x0 + " " + y + "H" + x1;
+        pen = true;
+      });
+      var attrs = {
+        d: d, fill: "none", stroke: stroke, "stroke-width": 2,
+        "stroke-linejoin": "round", "stroke-linecap": "round", "pointer-events": "none"
+      };
+      if (dash) attrs["stroke-dasharray"] = "5 4";
+      el("path", attrs, svg);
+    }
+    drawStepLine(s.prior, "var(--text-muted)", false);
+    if (s.prior2) drawStepLine(s.prior2.values, s.prior2.color, true);
+
+    // comparison dots for the other neighborhoods, with a 2px surface ring
+    (s.others || []).forEach(function (o) {
+      o.values.forEach(function (v, i) {
+        if (v === null) return;
+        var cx = mL + band * (i + 0.5), cy = Y(v);
+        if (o.shape === "circle") {
+          el("circle", { cx: cx, cy: cy, r: 4.5, fill: o.color, "pointer-events": "none" }, svg);
+        } else {
+          el("rect", {
+            x: cx - 4, y: cy - 4, width: 8, height: 8, fill: o.color, "pointer-events": "none",
+            transform: "rotate(45 " + cx + " " + cy + ")"
+          }, svg);
+        }
+      });
+    });
+
+    // event reference line (e.g. center opening), placed at its exact date
+    for (var i = 0; i < n; i++) {
+      var b = s.buckets[i];
+      if (b.start && EVENT.date >= b.start && EVENT.date < b.endEx) {
+        var frac = (s2d(EVENT.date) - s2d(b.start)) / (s2d(b.endEx) - s2d(b.start));
+        var ex = mL + band * (i + frac);
+        el("line", {
+          x1: ex, x2: ex, y1: 14, y2: Y(0),
+          stroke: "var(--text-muted)", "stroke-width": 1, "stroke-dasharray": "3 3",
+          "pointer-events": "none"
+        }, svg);
+        var onLeft = ex > W * 0.6;
+        el("text", {
+          x: ex + (onLeft ? -5 : 5), y: 12, "text-anchor": onLeft ? "end" : "start",
+          "font-size": 10, fill: "var(--text-muted)", "pointer-events": "none"
+        }, svg).textContent = EVENT.label;
+        svg.setAttribute("aria-label", svg.getAttribute("aria-label") + " A dashed reference line marks " + EVENT.label + ", 2026.");
+        break;
+      }
+    }
+    container.appendChild(svg);
+  }
+
+  /* ---------- disposition comparison card ---------- */
+  function renderDispoCard(card, body, thru) {
+    if (state.errors.dispo) {
+      var err = document.createElement("div");
+      err.className = "status error";
+      err.textContent = "Couldn’t load this data (" + state.errors.dispo + "). Check your connection and reload.";
+      body.appendChild(err); thru.textContent = "";
+      return;
+    }
+    if (!state.dispo) {
+      var st = document.createElement("div");
+      st.className = "status"; st.textContent = "Loading…";
+      body.appendChild(st); thru.textContent = "";
+      return;
+    }
+    var MS_DAY = 86400000;
+    var periods = [
+      { key: "before", label: "Before RESET Center opening · Jan 1 – May 3",
+        months: (s2d(EVENT.date) - s2d(START)) / MS_DAY / 30.437 },
+      { key: "after", label: "Since RESET Center opening · May 4 – " + fmtDay(state.dispo.through),
+        months: (s2d(addDays(state.dispo.through, 1)) - s2d(EVENT.date)) / MS_DAY / 30.437 }
+    ];
+    var COLS = [["handled", "Handled / advised"], ["arrest", "Arrest"], ["citation", "Citation"], ["report", "Report"], ["other", "Other"]];
+    var wrap = document.createElement("div"); wrap.className = "dispo-wrap";
+    periods.forEach(function (p) {
+      var box = document.createElement("div");
+      var h3 = document.createElement("h3"); h3.textContent = p.label;
+      box.appendChild(h3);
+      var tbl = document.createElement("table");
+      var thead = document.createElement("thead"), trh = document.createElement("tr");
+      ["", "Stops/mo"].concat(COLS.map(function (c) { return c[1]; })).forEach(function (t, i) {
+        var th = document.createElement("th"); th.textContent = t;
+        if (i > 0) th.className = "num";
+        th.scope = "col"; trh.appendChild(th);
+      });
+      thead.appendChild(trh); tbl.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      HOODS.forEach(function (hood) {
+        var data = state.dispo[p.key][hood.name.toUpperCase()] || {};
+        var total = COLS.reduce(function (a, c) { return a + (data[c[0]] || 0); }, 0);
+        var tr = document.createElement("tr");
+        var td0 = document.createElement("td"); td0.textContent = hood.short; tr.appendChild(td0);
+        var tdm = document.createElement("td"); tdm.className = "num";
+        tdm.textContent = total ? fmtN(Math.round(total / p.months)) : "—";
+        tr.appendChild(tdm);
+        COLS.forEach(function (c) {
+          var td = document.createElement("td"); td.className = "num";
+          td.textContent = total ? Math.round((data[c[0]] || 0) * 100 / total) + "%" : "—";
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      box.appendChild(tbl);
+      wrap.appendChild(box);
+    });
+    body.appendChild(wrap);
+    thru.textContent = "Officer-initiated (on-view) stops only · excludes cancelled/duplicates · data through " +
+      fmtDay(state.dispo.through) + ", " + state.dispo.through.slice(0, 4);
+  }
+
+  /* ---------- cards ---------- */
+  function buildCards() {
+    var grid = document.getElementById("grid");
+    grid.replaceChildren();
+    CHARTS.forEach(function (cfg) {
+      var card = document.createElement("section");
+      card.className = "card" + (cfg.kind === "dispo" ? " wide" : ""); card.id = "card-" + cfg.id;
+
+      var h = document.createElement("h2");
+      h.textContent = cfg.title;
+      var badge = document.createElement("span");
+      badge.className = "badge geo-badge"; badge.textContent = cfg.geo;
+      h.appendChild(badge);
+      card.appendChild(h);
+
+      var sub = document.createElement("p");
+      sub.className = "sub"; sub.textContent = cfg.sub;
+      card.appendChild(sub);
+
+      var body = document.createElement("div"); body.className = "chart-body";
+      card.appendChild(body);
+
+      var foot = document.createElement("div"); foot.className = "foot";
+      var thru = document.createElement("span"); thru.className = "thru";
+      var btn = document.createElement("button");
+      btn.type = "button"; btn.className = "tbl-btn"; btn.textContent = "View as table";
+      if (cfg.kind === "dispo") btn.hidden = true;
+      foot.appendChild(thru); foot.appendChild(btn);
+      card.appendChild(foot);
+
+      var tblWrap = document.createElement("div"); tblWrap.hidden = true;
+      card.appendChild(tblWrap);
+      btn.addEventListener("click", function () {
+        tblWrap.hidden = !tblWrap.hidden;
+        btn.textContent = tblWrap.hidden ? "View as table" : "Hide table";
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function renderAll() {
+    CHARTS.forEach(function (cfg) {
+      var card = document.getElementById("card-" + cfg.id);
+      var body = card.querySelector(".chart-body");
+      var thru = card.querySelector(".thru");
+      var tblWrap = card.querySelector("div[hidden], .foot + div");
+      tblWrap = card.lastElementChild;
+      body.replaceChildren();
+      tblWrap.replaceChildren();
+
+      card.querySelector(".geo-badge").textContent =
+        (cfg.kind === "dispo" || cfg.geo === "Citywide") ? cfg.geo : curShort();
+      if (cfg.kind === "dispo") {
+        renderDispoCard(card, body, thru);
+        return;
+      }
+      var srcErr = cfg.hoodOverride ? state.errors.city
+        : (cfg.src === "ems" || cfg.src === "deaths") ? state.errors[cfg.src]
+        : cur().errors[cfg.src];
+      if (srcErr) {
+        var err = document.createElement("div");
+        err.className = "status error";
+        err.textContent = "Couldn’t load this data (" + srcErr + "). Check your connection and reload.";
+        body.appendChild(err);
+        thru.textContent = "";
+        return;
+      }
+      var s = seriesFor(cfg, state.gran);
+      if (!s || !s.values.length) {
+        var st = document.createElement("div");
+        st.className = "status"; st.textContent = "No data available yet.";
+        body.appendChild(st);
+        thru.textContent = "";
+        return;
+      }
+      var hasPrior = s.prior && s.prior.some(function (p) { return p !== null; });
+      var legendEntries = [];
+      if (s.series) {
+        s.series.forEach(function (sd) { legendEntries.push({ name: sd.name, color: sd.color }); });
+      } else if (hasPrior) {
+        legendEntries.push({ name: s.pct ? curShort() + " share, 2026" : "2026", color: cfg.color || "var(--s-soma)" });
+      }
+      if (hasPrior) legendEntries.push({ name: cfg.priorName || PRIOR_LABEL, color: "var(--text-muted)", line: true });
+      if (s.prior2 && s.prior2.values.some(function (p) { return p !== null; })) {
+        legendEntries.push({ name: s.prior2.name, color: s.prior2.color, line: true, dash: true });
+      }
+      (s.others || []).forEach(function (o) {
+        legendEntries.push({ name: o.name, color: o.color, shape: o.shape });
+      });
+      if (s.others && !s.series && !hasPrior) {
+        legendEntries.unshift({ name: curShort() + " 2026", color: cfg.color || "var(--s-soma)" });
+      }
+      if (legendEntries.length) {
+        var leg = document.createElement("div");
+        leg.className = "legend";
+        legendEntries.forEach(function (sd) {
+          var k = document.createElement("span"); k.className = "key";
+          var sw = document.createElement("span"); sw.className = "sw" + (sd.line ? " line" : "") + (sd.shape ? " " + sd.shape : "");
+          sw.style.background = sd.dash
+            ? "repeating-linear-gradient(90deg, " + sd.color + " 0, " + sd.color + " 3px, transparent 3px, transparent 5px)"
+            : sd.color;
+          k.appendChild(sw); k.appendChild(document.createTextNode(sd.name));
+          leg.appendChild(k);
+        });
+        body.appendChild(leg);
+      }
+      renderChart(body, cfg, s);
+      var thruTxt = "Data through " + fmtDay(s.through) + ", " + s.through.slice(0, 4);
+      if (s.monthlyOnly && state.gran === "weekly") thruTxt = "Monthly only · " + thruTxt;
+      if (s.note) thruTxt += " · " + s.note;
+      thru.replaceChildren(document.createTextNode(thruTxt));
+      // flag a chart whose source has stopped publishing
+      var staleLimit = (cfg.src === "deaths") ? 75 : (cfg.src === "ems") ? 45 : (cfg.src === "ocme") ? 250 : (cfg.src === "police") ? 9 : 5;
+      if (daysAgo(s.through) > staleLimit) {
+        var badge = document.createElement("span");
+        badge.className = "stale-badge";
+        badge.textContent = "Not updating · " + daysAgo(s.through) + " days old";
+        thru.appendChild(badge);
+      }
+
+      // table view
+      var tbl = document.createElement("table");
+      var cap = document.createElement("caption");
+      cap.textContent = cfg.title + " — " + (s.monthlyOnly ? "monthly" : state.gran) + (s.pct ? " share of citywide" : " counts");
+      tbl.appendChild(cap);
+      var headers = ["Period"].concat(
+        s.series ? s.series.map(function (sr) { return sr.name; }).concat(["Total"])
+                 : [s.pct ? "% of citywide" : "Count"]);
+      if (hasPrior) headers.push(cfg.priorName || PRIOR_LABEL);
+      if (s.prior2) headers.push(s.prior2.name);
+      (s.others || []).forEach(function (o) { headers.push(o.name); });
+      var thead = document.createElement("thead"), trh = document.createElement("tr");
+      headers.forEach(function (t, i) {
+        var th = document.createElement("th"); th.textContent = t;
+        if (i > 0) th.className = "num";
+        th.scope = "col"; trh.appendChild(th);
+      });
+      thead.appendChild(trh); tbl.appendChild(thead);
+      var tbody = document.createElement("tbody");
+      s.buckets.forEach(function (b, i) {
+        var tr = document.createElement("tr");
+        var td1 = document.createElement("td");
+        td1.textContent = b.label + (b.partial ? " (partial)" : "");
+        tr.appendChild(td1);
+        var nums = s.series
+          ? s.series.map(function (sr) { return sr.values[i]; }).concat([s.values[i]])
+          : [s.values[i]];
+        if (hasPrior) nums.push(s.prior[i]);
+        if (s.prior2) nums.push(s.prior2.values[i]);
+        (s.others || []).forEach(function (o) { nums.push(o.values[i]); });
+        nums.forEach(function (nv) {
+          var td = document.createElement("td");
+          td.className = "num";
+          td.textContent = nv === null ? "—" : (s.pct ? fmtN(nv) + "%" : fmtN(nv));
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+      tbl.appendChild(tbody);
+      tblWrap.appendChild(tbl);
+    });
+    renderTiles();
+    renderFreshness();
+    document.getElementById("rangeNote").textContent = "";
+  }
+
+  /* ---------- data freshness strip ---------- */
+  // days between a YYYY-MM-DD date and today
+  function daysAgo(day) {
+    return Math.round((s2d(today()) - s2d(day)) / 86400000);
+  }
+  function renderFreshness() {
+    var el0 = document.getElementById("freshness");
+    el0.replaceChildren();
+    var H = cur();
+    var items = [
+      // police incidents are dated by when the crime occurred; reports are filed
+      // and entered days later, so the newest incident_date naturally trails ~5
+      // days even on a healthy daily feed. Dispatch/311 timestamp at call time
+      // and stay current-to-yesterday, so they use a tighter window.
+      { label: "Police incidents", day: H.through.police, staleAfter: 9 },
+      { label: "Dispatch calls", day: H.through.calls, staleAfter: 4 },
+      { label: "311 cases", day: H.through.t311, staleAfter: 4 },
+      { label: "Overdose deaths (citywide)", day: state.through.deaths, staleAfter: 75, monthly: true }
+    ];
+    var loaded = document.createElement("span");
+    loaded.className = "fresh-item";
+    var lb = document.createElement("b"); lb.textContent = "Loaded just now";
+    loaded.appendChild(lb);
+    loaded.appendChild(document.createTextNode(" · live from DataSF ·"));
+    el0.appendChild(loaded);
+
+    items.forEach(function (it) {
+      if (!it.day) return;
+      var span = document.createElement("span");
+      span.className = "fresh-item";
+      var age = daysAgo(it.day);
+      var stale = age > it.staleAfter;
+      if (stale) span.classList.add("is-stale");
+      var b = document.createElement("b");
+      b.textContent = it.label + ":";
+      span.appendChild(b);
+      var txt = " " + (it.monthly ? fmtMonth(it.day) : fmtDay(it.day));
+      if (stale) txt += " (" + age + " days ago)";
+      span.appendChild(document.createTextNode(txt));
+      el0.appendChild(span);
+    });
+  }
+
+  /* ---------- stat tiles ---------- */
+  function ytdOfDaily(key) {
+    var sum = 0;
+    if (!cur().daily[key]) return null;
+    cur().daily[key].forEach(function (n, day) { if (day >= START) sum += n; });
+    return sum;
+  }
+  function monthlyDelta(key) {
+    // latest complete month vs the one before, from daily data
+    var H = cur();
+    var through = H.through[key === "homeless" ? "t311" : "police"];
+    if (!through || !H.daily[key]) return null;
+    var m = monthStart(today());
+    var last = null, prev = null, lastM = null;
+    // walk back to find the two most recent complete months covered by data
+    var walk = monthStart(START), months = [];
+    while (walk < m) { months.push(walk); walk = nextMonth(walk); }
+    months = months.filter(function (mm) { return addDays(nextMonth(mm), -1) <= through; });
+    if (months.length < 2) return null;
+    function sumMonth(mm) {
+      var s = 0, end = nextMonth(mm);
+      H.daily[key].forEach(function (n, day) { if (day >= mm && day < end) s += n; });
+      return s;
+    }
+    lastM = months[months.length - 1];
+    last = sumMonth(lastM); prev = sumMonth(months[months.length - 2]);
+    return { last: last, prev: prev, label: MONTHS[+lastM.slice(5, 7) - 1] };
+  }
+
+  function renderTiles() {
+    var tiles = document.getElementById("tiles");
+    tiles.replaceChildren();
+    var defs = [
+      { label: "Drug offenses · " + curShort() + " YTD", color: "var(--s-soma)", value: ytdOfDaily("drugs"), delta: monthlyDelta("drugs"), err: cur().errors.police },
+      { label: "Homelessness-related 311 · " + curShort() + " YTD", color: "var(--s-soma)", value: ytdOfDaily("homeless"), delta: monthlyDelta("homeless"), err: cur().errors.t311 },
+      { label: "Officer-initiated stops · " + curShort() + " YTD", color: "var(--s-soma2)", value: ytdOfDaily("suspCallsOfficer"), delta: monthlyDelta("suspCallsOfficer"), err: cur().errors.calls },
+      { label: "Overdose deaths · SF YTD", color: "var(--s-city)",
+        value: state.deaths.length ? state.deaths.reduce(function (a, r) { return a + r.n; }, 0) : null,
+        note: state.through.deaths ? "preliminary · through " + fmtMonth(state.through.deaths).replace(" 2026", "") : null, err: state.errors.deaths }
+    ];
+    defs.forEach(function (d) {
+      var t = document.createElement("div"); t.className = "tile";
+      var lab = document.createElement("div"); lab.className = "t-label";
+      var dot = document.createElement("span"); dot.className = "t-dot"; dot.style.background = d.color;
+      lab.appendChild(dot); lab.appendChild(document.createTextNode(d.label));
+      var val = document.createElement("div"); val.className = "t-value";
+      val.textContent = d.err ? "—" : (d.value === null ? "…" : fmtN(d.value));
+      var sub = document.createElement("div"); sub.className = "t-delta";
+      if (d.delta && d.delta.prev > 0) {
+        var pct = Math.round((d.delta.last - d.delta.prev) / d.delta.prev * 100);
+        var span = document.createElement("span");
+        span.className = pct >= 0 ? "up" : "down";
+        span.textContent = (pct >= 0 ? "▲ +" : "▼ ") + pct + "%";
+        sub.appendChild(span);
+        sub.appendChild(document.createTextNode(" in " + d.delta.label + " vs prior month"));
+      } else if (d.note) {
+        sub.textContent = d.note;
+      }
+      t.appendChild(lab); t.appendChild(val); t.appendChild(sub);
+      tiles.appendChild(t);
+    });
+  }
+
+  /* ---------- controls ---------- */
+  var btnW = document.getElementById("btnWeekly"), btnM = document.getElementById("btnMonthly");
+  function setGran(g) {
+    state.gran = g;
+    btnW.setAttribute("aria-pressed", String(g === "weekly"));
+    btnM.setAttribute("aria-pressed", String(g === "monthly"));
+    renderAll();
+  }
+  btnW.addEventListener("click", function () { setGran("weekly"); });
+  btnM.addEventListener("click", function () { setGran("monthly"); });
+
+  var cmpToggle = document.getElementById("cmpToggle");
+  try { state.compare = localStorage.getItem("pd-compare") !== "off"; } catch (e) {}
+  cmpToggle.checked = state.compare;
+  cmpToggle.addEventListener("change", function () {
+    state.compare = cmpToggle.checked;
+    try { localStorage.setItem("pd-compare", state.compare ? "on" : "off"); } catch (e) {}
+    renderAll();
+  });
+
+  var cityToggle = document.getElementById("cityToggle");
+  try { state.pctMode = localStorage.getItem("pd-pct") === "on"; } catch (e) {}
+  cityToggle.checked = state.pctMode;
+  cityToggle.addEventListener("change", function () {
+    state.pctMode = cityToggle.checked;
+    try { localStorage.setItem("pd-pct", state.pctMode ? "on" : "off"); } catch (e) {}
+    renderAll();
+  });
+
+  var themeBtn = document.getElementById("themeBtn");
+  var themes = ["light", "dark", "auto"];
+  function applyTheme(t, save) {
+    if (t === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+    themeBtn.textContent = "Theme: " + t.charAt(0).toUpperCase() + t.slice(1);
+    if (save) { try { localStorage.setItem("pd-theme-v2", t); } catch (e) {} }
+  }
+  var savedTheme = "light";
+  try { savedTheme = localStorage.getItem("pd-theme-v2") || "light"; } catch (e) {}
+  applyTheme(savedTheme, false);
+  themeBtn.addEventListener("click", function () {
+    var cur = themes.indexOf(themeBtn.textContent.split(": ")[1].toLowerCase());
+    applyTheme(themes[(cur + 1) % 3], true);
+  });
+
+  /* ---------- boot ---------- */
+  /* ---------- neighborhood tabs ---------- */
+  function showLoadingCards() {
+    CHARTS.forEach(function (cfg) {
+      if (cfg.src === "ems" || cfg.src === "deaths" || cfg.hoodOverride || cfg.kind === "dispo") return;
+      var card = document.getElementById("card-" + cfg.id);
+      var body = card.querySelector(".chart-body");
+      body.replaceChildren();
+      var st = document.createElement("div");
+      st.className = "status"; st.textContent = "Loading…";
+      body.appendChild(st);
+    });
+  }
+  var tabBar = document.getElementById("hoodTabs");
+  function setHood(name) {
+    state.hood = name;
+    try { localStorage.setItem("pd-hood", name); } catch (e) {}
+    document.getElementById("hoodName").textContent = name;
+    Array.prototype.forEach.call(tabBar.children, function (b) {
+      b.setAttribute("aria-selected", String(b.dataset.hood === name));
+    });
+    if (ensureHood(name).loaded) { renderAll(); return; }
+    showLoadingCards();
+    loadHood(name).then(function () {
+      if (state.hood === name) renderAll();
+    });
+  }
+  HOODS.forEach(function (h) {
+    var b = document.createElement("button");
+    b.type = "button"; b.setAttribute("role", "tab");
+    b.dataset.hood = h.name; b.textContent = h.short;
+    b.setAttribute("aria-selected", "false");
+    b.addEventListener("click", function () { if (state.hood !== h.name) setHood(h.name); });
+    tabBar.appendChild(b);
+  });
+
+  /* ---------- boot ---------- */
+  buildCards();
+  CHARTS.forEach(function (cfg) {
+    var card = document.getElementById("card-" + cfg.id);
+    var st = document.createElement("div");
+    st.className = "status"; st.textContent = "Loading…";
+    card.querySelector(".chart-body").appendChild(st);
+  });
+
+  var savedHood = "Southern";
+  try {
+    var sh = localStorage.getItem("pd-hood");
+    if (sh && HOODS.some(function (h) { return h.name === sh; })) savedHood = sh;
+  } catch (e) {}
+  state.hood = savedHood;
+  document.getElementById("hoodName").textContent = savedHood;
+  Array.prototype.forEach.call(tabBar.children, function (b) {
+    b.setAttribute("aria-selected", String(b.dataset.hood === savedHood));
+  });
+
+  Promise.allSettled([
+    loadHood(savedHood),
+    loadEms().catch(function (e) { state.errors.ems = e.message; }),
+    loadDeaths().catch(function (e) { state.errors.deaths = e.message; }),
+    loadDispo().catch(function (e) { state.errors.dispo = e.message; }),
+    loadCity().catch(function (e) { state.errors.city = e.message; })
+  ]).then(function () {
+    renderAll();
+    // prefetch the other neighborhoods so the comparison dots (and instant
+    // tab switches) are available; re-render once they arrive
+    var rest = HOODS.filter(function (h) { return h.name !== savedHood; })
+      .map(function (h) { return loadHood(h.name); });
+    Promise.allSettled(rest).then(renderAll);
+  });
+})();
+</script>
+</body>
+</html>
