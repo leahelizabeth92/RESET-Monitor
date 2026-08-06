@@ -230,7 +230,7 @@
       <button type="button" id="btnWeekly" aria-pressed="true">Weekly</button>
       <button type="button" id="btnMonthly" aria-pressed="false">Monthly</button>
     </div>
-    <label class="cmp-toggle"><input type="checkbox" id="cmpToggle" checked> Compare neighborhoods</label>
+    <label class="cmp-toggle"><input type="checkbox" id="cmpToggle" checked> Compare districts</label>
     <label class="cmp-toggle"><input type="checkbox" id="cityToggle"> Show as % of citywide</label>
     <span class="range-note" id="rangeNote">Loading data&hellip;</span>
   </div>
@@ -243,6 +243,8 @@
   <section class="defs">
     <h2>What each chart counts</h2>
     <dl>
+      <dt>All dispatched calls by source</dt>
+      <dd>Every law-enforcement dispatched call of <em>any</em> type in the district (not just suspicious-person), split by who initiated it: <em>911 calls from the public</em> (onview flag N) versus <em>officer-initiated &ldquo;on-view&rdquo; records</em> (Y/HSOC), where an officer or street team generated the record on patrol. Officer-initiated activity is dominated by proactive work &mdash; passing/premise checks, traffic stops, sit/lie and suspicious-person stops. This is the broadest measure of who is driving dispatch activity. Excludes records cancelled by dispatch (CAN), cleared as no merit (22), or marked duplicate (DUP).</dd>
       <dt>Drug offenses</dt>
       <dd>Every SFPD incident whose <em>subcategory</em> is &ldquo;Drug Violation&rdquo; &mdash; possession, possession for sale, sale, and transport of controlled substances, plus public drug intoxication. These appear under three parent categories in the raw data (&ldquo;Drug Offense,&rdquo; &ldquo;Drug Violation,&rdquo; and &ldquo;Disorderly Conduct&rdquo;); this chart combines them all. Counts are <em>incidents, not charges</em>: a single incident that files several drug charges (which appears as several rows in the raw data) is counted once. <strong>An incident here is not the same as an arrest.</strong> SFPD records the outcome in a single &ldquo;Cite or Arrest Adult&rdquo; resolution that does not separate a citation from a booking, so the two can&rsquo;t be split directly from this data &mdash; but the charge mix is telling: the large majority are low-level possession or paraphernalia offenses (led by paraphernalia possession) that in San Francisco are typically cite-and-release, and only a minority &mdash; sale, possession-for-sale, or armed charges &mdash; are the kind that reliably end in someone being taken into custody.</dd>
       <dt>&ldquo;Suspicious person&rdquo; calls &amp; stops</dt>
@@ -261,7 +263,7 @@
           <li><strong>Report</strong> &mdash; the officer wrote a formal incident report, documenting something without an arrest or citation (code REP).</li>
           <li><strong>Other</strong> &mdash; everything else: no disposition recorded, determined to have no merit, person gone before contact, unable to locate, etc.</li>
         </ul>
-        Percentages are each outcome&rsquo;s share of that neighborhood&rsquo;s stops in the period. Public 911 calls are not included in this table &mdash; only stops officers initiated themselves. Per DataSF, disposition codes are informational and recorded in the field &mdash; arrest dispositions here will not exactly match official SFPD arrest statistics, so use this table for comparing patterns, not as official counts.</dd>
+        Percentages are each outcome&rsquo;s share of that district&rsquo;s stops in the period. Public 911 calls are not included in this table &mdash; only stops officers initiated themselves. Per DataSF, disposition codes are informational and recorded in the field &mdash; arrest dispositions here will not exactly match official SFPD arrest statistics, so use this table for comparing patterns, not as official counts.</dd>
       <dt>Drug overdose deaths — citywide (preliminary)</dt>
       <dd>Preliminary count of unintentional fatal drug overdoses from the Office of the Chief Medical Examiner&rsquo;s monthly report. Counts are revised as investigations conclude. Citywide only.</dd>
     </dl>
@@ -475,6 +477,7 @@
     H.loading = Promise.allSettled([
       loadPolice(name, H).catch(function (e) { H.errors.police = e.message; }),
       loadCalls(name, H).catch(function (e) { H.errors.calls = e.message; }),
+      loadAllCalls(name, H).catch(function (e) { H.errors.allcalls = e.message; }),
       loadThreeOneOne(name, H).catch(function (e) { H.errors.t311 = e.message; })
     ]).then(function () { H.loaded = true; H.loading = null; });
     return H.loading;
@@ -513,6 +516,37 @@
         }
       });
       H.through.calls = maxDay;
+    });
+  }
+
+  function loadAllCalls(hood, H) {
+    // EVERY dispatched call type (not just suspicious person), split by who
+    // initiated it. Excludes cancelled/no-merit/duplicate dispositions. Public =
+    // 911 call from the public (onview N); Officer = officer/street-team on-view
+    // (Y/HSOC) — dominated by proactive activity (passing calls, traffic stops).
+    return soql("2zdj-bwza", {
+      "$select": "date_trunc_ymd(received_datetime) as d, onview_flag, count(*) as n",
+      "$where": "received_datetime>='" + PRIOR_START + "' AND police_district='" + hood.toUpperCase() + "'" +
+        " AND (disposition not in('CAN','22','DUP') OR disposition is null)",
+      "$group": "d, onview_flag",
+      "$limit": "20000"
+    }).then(function (rows) {
+      H.daily.allPublic = new Map();
+      H.daily.allOfficer = new Map();
+      H.prior.allCalls = new Map();
+      var maxDay = null;
+      rows.forEach(function (r) {
+        var day = String(r.d).slice(0, 10);
+        var n = +r.n;
+        if (day < START) {
+          H.prior.allCalls.set(day, (H.prior.allCalls.get(day) || 0) + n);
+        } else {
+          if (!maxDay || day > maxDay) maxDay = day;
+          var m = r.onview_flag === "N" ? H.daily.allPublic : H.daily.allOfficer;
+          m.set(day, (m.get(day) || 0) + n);
+        }
+      });
+      H.through.allcalls = maxDay;
     });
   }
 
@@ -669,6 +703,14 @@
 
   /* ---------- chart config ---------- */
   var CHARTS = [
+    { id: "allcalls", kind: "stack", geo: "Southern",
+      priorKey: "allCalls", priorName: "Total · same period 2025",
+      title: "All dispatched calls by source",
+      sub: "Every call type · officer-initiated vs. public 911 · excludes cancelled/duplicates", src: "allcalls",
+      series: [
+        { key: "allPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
+        { key: "allOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
+      ] },
     { id: "suspcalls", kind: "stack", geo: "SoMa", cityKey: "suspCalls",
       priorKey: "suspCalls", priorName: "Total · same period 2025",
       priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
@@ -691,14 +733,14 @@
         { key: "violent",  name: "Violent crime", color: "var(--s-soma2)" },
         { key: "burglary", name: "Burglary",      color: "var(--s-soma3)" }
       ] },
-    { id: "dispo",    kind: "dispo", geo: "SoMa · Tenderloin · Mission",
+    { id: "dispo",    kind: "dispo", geo: "Southern · Tenderloin · Mission",
       title: "How officer-initiated “suspicious person” stops end",
-      sub: "Share of stop outcomes by neighborhood, before vs. since the RESET Center opening", src: "dispo" },
+      sub: "Share of stop outcomes by district, before vs. since the RESET Center opening", src: "dispo" },
     { id: "suspcity", kind: "stack", geo: "Citywide", hoodOverride: "__city__",
       priorKey: "suspCalls", priorName: "Total · same period 2025",
       priorKey2: "suspCallsPublic", prior2Name: "Public 911 calls · same period 2025", prior2Color: "var(--s-prior2)",
       title: "“Suspicious person” calls & stops — citywide",
-      sub: "All of San Francisco · same definitions as the neighborhood chart above", src: "calls",
+      sub: "All of San Francisco · same definitions as the district chart above", src: "calls",
       series: [
         { key: "suspCallsPublic",  name: "911 calls from the public",   color: "var(--s-soma)" },
         { key: "suspCallsOfficer", name: "Officer-initiated (on-view)", color: "var(--s-soma2)" }
