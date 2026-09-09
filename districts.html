@@ -270,15 +270,15 @@
     <p>The two &ldquo;&mdash; citywide&rdquo; charts show San Francisco totals for suspicious-person dispatches and homelessness-related 311 requests, using identical definitions to the neighborhood versions with no geographic filter. They answer whether the city&rsquo;s overall numbers are rising or falling, independent of any one neighborhood, and don&rsquo;t change with the selected tab.</p>
     <p>&ldquo;Show as % of citywide&rdquo; re-draws each district chart as that district&rsquo;s share of the citywide total for the same period (e.g., the Southern district&rsquo;s drug offenses as a percentage of all SF drug offenses) &mdash; a scale-free way to see whether activity is concentrating in or leaving a neighborhood. In this mode the prior-year line and comparison dots become shares too, and stacked charts show the neighborhood&rsquo;s total share. The two citywide overdose charts are unaffected.</p>
     <p>The circle and diamond dots on each neighborhood chart show the other two neighborhoods&rsquo; totals for the same period, for side-by-side comparison (also listed in each chart&rsquo;s tooltip and table). The gray line on each chart shows the same period one year earlier (weekly views compare the same-weekday week 52 weeks back; in-progress periods compare only the days elapsed so far). On the suspicious-person chart the solid gray line is last year&rsquo;s <em>total</em> and the dashed amber line is last year&rsquo;s <em>public 911 calls only</em>, so each stacked layer has its own comparison. The dashed vertical line marks the RESET Center opening on May&nbsp;4,&nbsp;2026.</p>
-    <p>The city&rsquo;s <a href="https://data.sfgov.org/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a>, <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/law-enforcement-dispatched-calls-for-service" target="_blank" rel="noopener">dispatched calls explainer</a> (including &ldquo;on-view&rdquo; officer-initiated records and disposition codes), and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
+    <p>The city&rsquo;s <a href="https://data.sf.gov/d/ci9u-8awy" target="_blank" rel="noopener">Police Incident Code Crosswalk</a> lists every raw incident code and the category/subcategory it rolls into; the <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/sfpd-incident-report-2018-to-present" target="_blank" rel="noopener">SFPD dataset explainer</a>, <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/law-enforcement-dispatched-calls-for-service" target="_blank" rel="noopener">dispatched calls explainer</a> (including &ldquo;on-view&rdquo; officer-initiated records and disposition codes), and <a href="https://sfdigitalservices.gitbook.io/dataset-explainers/311-cases" target="_blank" rel="noopener">311 dataset explainer</a> describe how each dataset is produced.</p>
   </section>
 
   <footer class="page">
     <p><strong>Sources (SF Open Data portal):</strong>
-      <a href="https://data.sfgov.org/d/wg3w-h783" target="_blank" rel="noopener">Police Incident Reports</a> &middot;
-      <a href="https://data.sfgov.org/d/2zdj-bwza" target="_blank" rel="noopener">Dispatched Calls for Service</a> &middot;
-      <a href="https://data.sfgov.org/d/vw6y-z8j6" target="_blank" rel="noopener">311 Cases</a> &middot;
-      <a href="https://data.sfgov.org/d/jxrr-bmra" target="_blank" rel="noopener">Preliminary Unintentional Drug Overdose Deaths (citywide)</a>
+      <a href="https://data.sf.gov/d/wg3w-h783" target="_blank" rel="noopener">Police Incident Reports</a> &middot;
+      <a href="https://data.sf.gov/d/2zdj-bwza" target="_blank" rel="noopener">Dispatched Calls for Service</a> &middot;
+      <a href="https://data.sf.gov/d/vw6y-z8j6" target="_blank" rel="noopener">311 Cases</a> &middot;
+      <a href="https://data.sf.gov/d/jxrr-bmra" target="_blank" rel="noopener">Preliminary Unintentional Drug Overdose Deaths (citywide)</a>
     </p>
     <p>The tabs use SFPD <strong>Police District</strong> boundaries (&ldquo;Southern,&rdquo; &ldquo;Tenderloin,&rdquo; &ldquo;Mission&rdquo;) &mdash; the operational patrol districts, <em>not</em> the city&rsquo;s Analysis Neighborhoods. These are different geographies: for example, the Southern district covers South of Market plus part of the downtown/South Beach waterfront, and the Tenderloin district reaches south of Market Street. Totals here will therefore differ from the neighborhood-boundary dashboard. Overdose deaths are shown citywide only (the medical examiner reports deaths by ZIP, which does not map onto police districts). Police and 311 counts reflect reports/dispatches, not verified incidents, and recent days may still be loading into the city portal. Overdose death counts are preliminary medical-examiner determinations and are revised.</p>
     <p>Charts refresh with the latest city data every time this page is opened. Police, dispatch, and 311 data update daily (typically through yesterday); citywide overdose deaths update monthly.</p>
@@ -293,7 +293,7 @@
   var START = "2026-01-01";
   var PRIOR_START = "2025-01-01";  // fetch one extra year for the year-over-year line
   var PRIOR_LABEL = "Same period 2025";
-  var SODA = "https://data.sfgov.org/resource/";
+  var SODA = "https://data.sf.gov/resource/";
 
   /* ---------- date helpers (all on YYYY-MM-DD strings, UTC-anchored) ---------- */
   function d2s(d) { return d.toISOString().slice(0, 10); }
