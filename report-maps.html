@@ -2,25 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SF suspicious-person &amp; drug reports: concentrated or expanded?</title>
 <style>
 :root{
   color-scheme:light;
-  --page:#f9f9f7;--surface:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);
+  --page:#ffffff;--surface:#ffffff;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--grid:#e1e0d9;--axis:#c3c2b7;--border:rgba(11,11,11,.10);
   --q1:#cde2fb;--q2:#9ec5f4;--q3:#5598e7;--q4:#2a78d6;--q5:#184f95;--q6:#0d366b;
   --dn3:#184f95;--dn2:#3987e5;--dn1:#9ec5f4;--d0:#e1e0d9;--dp1:#f2aaa6;--dp2:#e34948;--dp3:#9e1f1f;
   --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;
   --hood:#b5b3aa;
 }
-@media (prefers-color-scheme:dark){:root{
-  color-scheme:dark;
-  --page:#0d0d0d;--surface:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--axis:#383835;--border:rgba(255,255,255,.10);
-  --q1:#0d366b;--q2:#184f95;--q3:#256abf;--q4:#3987e5;--q5:#86b6ef;--q6:#cde2fb;
-  --dn3:#86b6ef;--dn2:#3987e5;--dn1:#184f95;--d0:#383835;--dp1:#7d2a2a;--dp2:#e34948;--dp3:#f2aaa6;
-  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;
-  --hood:#55544f;
-}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{max-width:1180px;margin:0 auto;padding:28px 16px 60px}
@@ -116,11 +109,11 @@ ul.find{margin:8px 0 0;padding-left:20px}ul.find li{margin:5px 0}
 <div class="legend" id="chLegend"></div>
 </div>
 <div>
-<h2>Hexagons needed to cover 80% of reports</h2>
-<div class="note">Fewer hexagons means more concentrated. Years end in September.</div>
+<h2 id="c1Title"></h2>
+<div class="note">Number of ten-acre hexagons that together hold 80% of the year's citywide total. Fewer hexagons means more concentrated. Years end in September.</div>
 <div id="c1"></div>
-<h2 style="margin-top:18px">Share of citywide reports by neighborhood</h2>
-<div class="note">Percent of the year's total.</div>
+<h2 style="margin-top:18px" id="c2Title"></h2>
+<div class="note">Each neighborhood's percent of the citywide total for that year. Years end in September.</div>
 <div id="c2"></div>
 </div>
 </div>
@@ -192,7 +185,10 @@ function render(){
   const cm=document.getElementById('chMap');cm.setAttribute('viewBox',B);cm.innerHTML=h+hoodSvg+lab;
   const t=dth;document.getElementById('chLegend').innerHTML='<span>Change in yearly reports:</span>'+[['dn3','−'+t[2]+' or more'],['dn2','−'+t[1]+' to −'+(t[2]-1)],['dn1','−'+t[0]+' to −'+(t[1]-1)],['d0','little change'],['dp1','+'+t[0]+' to +'+(t[1]-1)],['dp2','+'+t[1]+' to +'+(t[2]-1)],['dp3','+'+t[2]+' or more']].map(([c,l])=>`<span><i style="background:var(--${c})"></i>${l}</span>`).join('');
   document.getElementById('smLegend').innerHTML=document.getElementById('chLegend').innerHTML;
-  line('c1',[{name:'Hexagons for 80%',color:'var(--s1)',v:M.map(m=>m.n80)}],v=>fmt(v));
+  const low=NAMES[S.s].replace(/^[A-Z]/,c=>c.toLowerCase());
+  document.getElementById('c1Title').textContent="How concentrated "+low+" are: hexagons holding 80% of the year's total";
+  document.getElementById('c2Title').textContent='Share of citywide '+low+' in the Tenderloin, SoMa, the Mission and the rest of the city';
+  line('c1',[{name:'Hexagons holding 80% of '+low,color:'var(--s1)',v:M.map(m=>m.n80)}],v=>fmt(v));
   line('c2',[{name:'Tenderloin',color:'var(--s1)',v:M.map(m=>100*m.tl/m.total)},{name:'SoMa',color:'var(--s2)',v:M.map(m=>100*m.so/m.total)},{name:'Mission',color:'var(--s3)',v:M.map(m=>100*m.mi/m.total)},{name:'Rest of city',color:'var(--s4)',v:M.map(m=>100*(1-core(m)))}],v=>v.toFixed(0)+'%');
   document.getElementById('tbTitle').textContent='Table: '+NAMES[S.s].replace(/^[A-Z]/,c=>c.toLowerCase());
   document.getElementById('tbl').innerHTML='<tr><th>Year</th><th>Reports</th><th>Hexagons with any</th><th>Hexagons with 12+ a year</th><th>Hexagons for 50%</th><th>Hexagons for 80%</th><th>Top 10 hexagons\' share</th><th>Tenderloin</th><th>SoMa</th><th>Mission</th><th>Rest of city</th></tr>'+M.map(m=>`<tr><td>${yl(m.y)}</td><td>${fmt(m.total)}</td><td>${fmt(m.active)}</td><td>${fmt(m.a12)}</td><td>${m.n50}</td><td>${m.n80}</td><td>${pct(m.top10)}</td><td>${pct(m.tl/m.total)}</td><td>${pct(m.so/m.total)}</td><td>${pct(m.mi/m.total)}</td><td>${pct(1-core(m))}</td></tr>`).join('');
